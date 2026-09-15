@@ -1,0 +1,44 @@
+{% extends 'plantillas/base.html' %} {% block navbar %}
+<div
+  class="navbar navbar-expand-lg fixed-top bg-primary"
+  data-bs-theme="light"
+  style=""
+>
+  <div class="container">
+    <a class="nav-link" href="{% url 'producto_create' %}"
+            >Registrar pedido</a
+          >
+    <button
+      class="navbar-toggler collapsed"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#navbarResponsive"
+      aria-controls="navbarResponsive"
+      aria-expanded="false"
+      aria-label="Toggle navigation"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="navbar-collapse collapse" id="navbarResponsive" style="">
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a
+            href="/listar/?estado=pendiente"
+            class="nav-link {% if estado_actual == 'pendiente' %}active{% endif %}"
+          >
+            Pendientes
+          </a>
+        </li>
+        <li class="nav-item">
+          <a
+            href="/listar/?estado=despachado"
+            class="nav-link {% if estado_actual == 'despachado' %}active{% endif %}"
+          >
+            Despachados
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

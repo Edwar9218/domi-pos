@@ -1,0 +1,11 @@
+db.sqlite3
+datos.json
+.env
+__pycache__/
+*.pyc
+*.pyo
+staticfiles/
+media/
+*.log
+.vscode/
+.idea/

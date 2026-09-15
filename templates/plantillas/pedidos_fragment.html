@@ -1,0 +1,21 @@
+<script>
+  console.log(object_list)
+</script>
+
+
+{% for obj in object_list|dictsort:"creado_en" %}
+  <div class="feature col">
+    <div onclick="mostrarModalPedido(`{{ obj.txt|escapejs }}`, {{ obj.id }})" style="cursor: pointer">
+      <div class="feature-icon d-inline-flex align-items-center justify-content-center bg-primary text-white fs-5 rounded-circle mb-3" style="width: 40px; height: 40px;">
+        {{ forloop.counter }}
+      </div>
+      <h3 class="fs-5 text-body-emphasis mb-1">
+        {{ obj.creado_en|date:"H:i" }}
+        {% if "Nuevo" in obj.txt %}
+          <span class="badge bg-warning text-dark ms-2">Nuevo</span>
+        {% endif %}
+      </h3>
+      <p>{{ obj.txt }}</p>
+    </div>
+  </div>
+{% endfor %}

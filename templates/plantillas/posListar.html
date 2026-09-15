@@ -1,0 +1,531 @@
+{% extends 'plantillas/navbar.html' %}
+{% load static %}
+{% block title %}
+  {% if estado_actual == "despachado" %}
+    Pedidos despachados
+  {% else %}
+    Pedidos pendientes
+  {% endif %}
+{% endblock %}
+
+{% block head %}
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+{% endblock head %}
+
+{% block estra_css %}
+<style>
+  .feature p {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.5em;
+    min-height: calc(1.5em * 4);
+  }
+
+  #pedidoTexto {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 1.1rem;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  h4.fecha-group {
+    font-weight: bold;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 0.2em;
+    margin-top: 2em;
+  }
+
+  .fecha-group button {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #0d6efd;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+  .fecha-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.5rem;
+  border-bottom: 1px solid #ccc;
+  margin-top: 1.5rem;
+}
+
+.fecha-btn {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #3A7734 !important; /* Asegura que no se sobrescriba */
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.fecha-btn:hover {
+  text-decoration: underline;
+  color: #2e5e2e !important; /* Un tono más oscuro al pasar el cursor */
+}
+
+
+.resumen-pedidos {
+  font-size: 0.95rem;
+  background-color: #34C759;
+  color: #fff;
+  padding: 0.4em 0.8em;
+  border-radius: 0.6em;
+  font-weight: 500;
+  white-space: nowrap;
+  border: 2px solid #2DA74C;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+}
+.mes-header {
+  border-top: 2px solid #333;
+  padding-top: 0.5rem;
+  margin-top: 1rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #222;
+}
+
+.mes-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: left;
+  color: #1e3a8a; /* azul oscuro */
+}
+
+.fecha-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  font-weight: 500;
+  text-align: left;
+  color: #16a34a; /* verde más llamativo */
+}
+
+#loader {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1050; /* por encima del contenido */
+  background-color: white; /* opcional, si quieres cubrir */
+  padding: 2rem;
+  border-radius: 8px;
+}
+
+
+</style>
+{% endblock estra_css %}
+
+{% block content %}
+<!-- Spinner de carga -->
+<div id="loader" class="text-center mt-5">
+  <div class="spinner-border text-success" role="status">
+    <span class="visually-hidden">Cargando...</span>
+  </div>
+</div>
+
+<!-- Contenedor principal, oculto al principio -->
+<div class="container px-4 py-5 mt-5" id="featured-3" style="visibility: hidden;">
+  <h2 class="pb-2 border-bottom">
+    {% if estado_actual == "despachado" %}
+      Historial de pedidos despachados
+    {% else %}
+      Historial de pedidos pendientes
+    {% endif %}
+  </h2>
+
+  {% regroup object_list by creado_en.date as pedidos_por_fecha %}
+  {% for group in pedidos_por_fecha %}
+    {% with group.grouper|date:'Y-m-d' as fecha_id %}
+      <h4 class="fecha-group d-flex align-items-center justify-content-between">
+  <button type="button" class="fecha-btn" onclick="togglePedidos('{{ fecha_id }}')">
+    📅 {{ group.grouper|date:"l, d \\d\\e F \\d\\e Y" }}
+  </button>
+  <span class="badge resumen-pedidos">
+    🧾 {{ group.list|length }} pedido{{ group.list|length|pluralize }}
+  </span>
+</h4>
+
+
+      </h4>
+      <div id="pedidos-{{ fecha_id }}" class="row g-4 py-2 row-cols-1 row-cols-lg-3"
+           style="display: none;"
+>
+        {% for obj in group.list|dictsort:"creado_en" %}
+          <div class="feature col">
+            <div onclick="mostrarModalPedido(`{{ obj.txt|escapejs }}`, {{ obj.id }})" style="cursor: pointer">
+              <div class="feature-icon d-inline-flex align-items-center justify-content-center bg-primary text-white fs-5 rounded-circle mb-3" style="width: 40px; height: 40px;">
+                {{ forloop.counter }}
+              </div>
+              <h3 class="fs-5 text-body-emphasis mb-1">
+                {{ obj.creado_en|date:"H:i" }}
+                {% if "Nuevo" in obj.txt %}
+                  <span class="badge bg-warning text-dark ms-2">Nuevo</span>
+                {% endif %}
+              </h3>
+              <p>{{ obj.txt }}</p>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endwith %}
+  {% endfor %}
+</div>
+
+<!-- Modal editar pedido -->
+<div class="modal fade" id="pedidoModal" tabindex="-1" aria-labelledby="pedidoModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" id="pedidoForm">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="pedidoModalLabel">Editar pedido</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <textarea name="txt" id="pedidoTexto" class="form-control mb-3" rows="8"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button onclick="confirmarDespacho(currentPedidoId)" type="button" class="btn btn-success btn-sm">Despachar</button>
+          <a href="#" id="btnEliminar" class="btn btn-danger btn-sm">Eliminar</a>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmación despacho -->
+<div class="modal fade" id="confirmarDespachoModal" tabindex="-1" aria-labelledby="confirmarDespachoModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">¿Desea imprimir el ticket?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        Puede elegir imprimir el ticket o simplemente marcar el pedido como despachado.
+      </div>
+      <div class="modal-footer">
+        <form method="POST" id="formImprimir" style="display:inline;">
+          {% csrf_token %}
+          <input type="hidden" name="imprimir" value="si">
+          <button type="submit" class="btn btn-primary">Sí, imprimir</button>
+        </form>
+        <form method="POST" id="formDespachar" style="display:inline;">
+          {% csrf_token %}
+          <input type="hidden" name="imprimir" value="no">
+          <button type="submit" class="btn btn-secondary">No, solo despachar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/funciones.js' %}"></script>
+<script src="{% static 'js/reconnecting-websocket.min.js' %}"></script>
+<script>
+(function () {
+  const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/productos/`;
+  let socket = new ReconnectingWebSocket(wsUrl);
+
+  const isModalActive = () => {
+    const modal = document.getElementById('pedidoModal');
+    return modal?.classList.contains('show');
+  };
+
+  const updateAllGroups = () => {
+    document.querySelectorAll('[id^="pedidos-"]').forEach(grupo => {
+      const fechaId = grupo.id.replace('pedidos-', '');
+      fetch(`/pedidos-por-fecha/?fecha=${fechaId}&estado={{ estado_actual }}`)
+        .then(res => res.json())
+        .then(data => {
+          grupo.innerHTML = data.html;
+
+          const pedidosActualizados = grupo.querySelectorAll('.feature').length;
+          const resumen = grupo.previousElementSibling.querySelector('.resumen-pedidos');
+          if (resumen) {
+            resumen.textContent = `🧾 ${pedidosActualizados} pedido${pedidosActualizados === 1 ? '' : 's'}`;
+          }
+        });
+    });
+  };
+
+  // 👉 Función para actualizar el contador total de pedidos en el mes
+  const actualizarContadorMes = (mesId) => {
+    const contenedorMes = document.getElementById(mesId);
+    if (!contenedorMes) return;
+
+    const totalPedidos = contenedorMes.querySelectorAll('.feature').length;
+    const resumenBadge = contenedorMes.parentElement.querySelector('.badge.bg-success');
+    if (resumenBadge) {
+      resumenBadge.textContent = `${totalPedidos} pedido${totalPedidos === 1 ? '' : 's'} en total`;
+    }
+  };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    if (data.tipo === 'actualizar_fecha') {
+      const fechaId = data.fecha;
+      const grupo = document.getElementById(`pedidos-${fechaId}`);
+
+      fetch(`/pedidos-por-fecha/?fecha=${fechaId}&estado={{ estado_actual }}`)
+        .then(res => res.json())
+        .then(info => {
+          if (grupo) {
+            grupo.innerHTML = info.html;
+
+            const pedidosActualizados = grupo.querySelectorAll('.feature').length;
+            const resumen = grupo.previousElementSibling.querySelector('.resumen-pedidos');
+            if (resumen) {
+              resumen.textContent = `🧾 ${pedidosActualizados} pedido${pedidosActualizados === 1 ? '' : 's'}`;
+            }
+
+            // ✅ Actualiza el contador total del mes también si ya existía
+            const mesId = `mes-${fechaId.slice(0, 7)}`;  // mes-YYYY-MM
+            actualizarContadorMes(mesId);
+          
+          } else {
+            const container = document.getElementById('featured-3');
+            const [año, mes, dia] = fechaId.split('-');
+            const fecha = new Date(Number(año), Number(mes) - 1, Number(dia));
+            const fechaFormateada = fecha.toLocaleDateString(navigator.language || 'es-CO', {
+              weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+            });
+
+            const htmlGroup = `
+              <h4 class="fecha-group d-flex align-items-center justify-content-between">
+                <button type="button" class="fecha-btn" onclick="togglePedidos('${fechaId}')">
+                  📅 ${fechaFormateada}
+                </button>
+                <span class="badge resumen-pedidos">
+                  🧾 1 pedido
+                </span>
+              </h4>
+              <div id="pedidos-${fechaId}" class="row g-4 py-2 row-cols-1 row-cols-lg-3" style="display: none;">
+                ${info.html}
+              </div>
+            `;
+
+            const tempDia = document.createElement('div');
+            tempDia.innerHTML = htmlGroup;
+
+            // Construir mesId en formato mes-YYYY-MM
+            const mesId = `mes-${año}-${("0" + mes).slice(-2)}`;
+            let contenedorMes = document.getElementById(mesId);
+
+            if (contenedorMes) {
+              // Si el mes ya existe, inserta el nuevo día ordenado dentro del mes
+              const gruposEnMes = Array.from(contenedorMes.querySelectorAll('[id^="pedidos-"]'));
+              const nuevaFecha = new Date(fechaId);
+              let insertado = false;
+
+              for (const grupoExistente of gruposEnMes) {
+                const id = grupoExistente.id.replace('pedidos-', '');
+                const fechaExistente = new Date(id);
+
+                if (nuevaFecha > fechaExistente) {
+                  contenedorMes.insertBefore(tempDia, grupoExistente.previousElementSibling);
+                  insertado = true;
+                  break;
+                }
+              }
+
+              if (!insertado) contenedorMes.appendChild(tempDia);
+
+            } else {
+              // Si el mes NO existe, crea todo: encabezado del mes y el día
+              const mesNombre = fecha.toLocaleDateString(navigator.language || 'es-CO', { month: 'long' });
+
+              const htmlMes = `
+                <h4 class="mt-3 ms-2 d-flex justify-content-between align-items-center">
+                  <button type="button" class="fecha-btn" onclick="toggleMes('${mesId}')">
+                    📂 ${mesNombre} ${año}
+                  </button>
+                  <span class="badge bg-success fs-6">1 pedido en total</span>
+                </h4>
+                <div id="${mesId}" style="display: block;"></div>
+              `;
+
+              const tempMes = document.createElement('div');
+              tempMes.innerHTML = htmlMes;
+              container.appendChild(tempMes);
+              contenedorMes = tempMes.querySelector(`#${mesId}`);
+              contenedorMes.appendChild(tempDia);
+            }
+
+            // ✅ Actualiza el contador del mes al insertar el nuevo pedido dinámicamente
+            actualizarContadorMes(mesId);
+          }
+        });
+    }
+  };
+
+  const togglePedidos = (fechaId) => {
+    const contenedor = document.getElementById(`pedidos-${fechaId}`);
+    const visible = contenedor.style.display === 'none' ? 'flex' : 'none';
+    contenedor.style.display = visible;
+
+    let abiertos = JSON.parse(localStorage.getItem('gruposAbiertos') || '[]');
+    abiertos = visible === 'flex'
+      ? [...new Set([...abiertos, fechaId])]
+      : abiertos.filter(id => id !== fechaId);
+
+    localStorage.setItem('gruposAbiertos', JSON.stringify(abiertos));
+  };
+
+  const restoreScrollAndState = () => {
+    const scrollY = localStorage.getItem('scrollY');
+    if (scrollY !== null) {
+      window.scrollTo(0, parseInt(scrollY));
+      localStorage.removeItem('scrollY');
+    }
+
+    const abiertos = JSON.parse(localStorage.getItem('gruposAbiertos') || '[]');
+    abiertos.forEach(id => {
+      const contenedor = document.getElementById(`pedidos-${id}`);
+      if (contenedor) contenedor.style.display = 'flex';
+    });
+  };
+
+  const intentarReconectarSocket = () => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      socket = new ReconnectingWebSocket(wsUrl);
+    }
+  };
+
+  const agruparPorAnioYMes = () => {
+    const container = document.getElementById("featured-3");
+    const grupos = [...container.querySelectorAll(".fecha-group")];
+
+    const estructura = {};
+
+    grupos.forEach(grupo => {
+      const btn = grupo.querySelector("button");
+      const fechaTexto = btn?.textContent?.trim();
+      if (!fechaTexto) return;
+
+      const regex = /(\d{2}) de (\w+) de (\d{4})$/;
+      const match = fechaTexto.match(regex);
+      if (!match) return;
+
+      const [, dia, mes, año] = match;
+
+      if (!estructura[año]) estructura[año] = {};
+      if (!estructura[año][mes]) estructura[año][mes] = [];
+
+      const fechaId = btn.getAttribute("onclick").match(/togglePedidos\('([\d\-]+)'\)/)[1];
+      const pedidos = document.getElementById(`pedidos-${fechaId}`);
+
+      const resumen = grupo.querySelector(".resumen-pedidos");
+      const totalPedidosTexto = resumen?.textContent?.match(/(\d+)/);
+      const totalPedidos = totalPedidosTexto ? parseInt(totalPedidosTexto[1], 10) : 0;
+
+      estructura[año][mes].push({ header: grupo, pedidos, totalPedidos, fechaId });
+    });
+
+    container.innerHTML = "<h2 class='pb-2 border-bottom'>Historial agrupado</h2>";
+
+    const mesesOrden = [
+      "enero", "febrero", "marzo", "abril", "mayo", "junio",
+      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    ];
+
+    Object.keys(estructura).sort((a, b) => b - a).forEach(año => {
+      const añoDiv = document.createElement("div");
+      añoDiv.innerHTML = `<h3 class="mt-4">${año}</h3>`;
+      container.appendChild(añoDiv);
+
+      const meses = estructura[año];
+      Object.keys(meses)
+        .sort((a, b) => mesesOrden.indexOf(b.toLowerCase()) - mesesOrden.indexOf(a.toLowerCase()))
+        .forEach(mes => {
+          const dias = meses[mes];
+          const totalMes = dias.reduce((acc, d) => acc + d.totalPedidos, 0);
+
+          const mesId = `mes-${año}-${("0" + (mesesOrden.indexOf(mes.toLowerCase()) + 1)).slice(-2)}`;
+
+          const mesDiv = document.createElement("div");
+          mesDiv.innerHTML = `
+            <h4 class="mt-3 ms-2 d-flex justify-content-between align-items-center">
+              <button type="button" class="fecha-btn" onclick="toggleMes('${mesId}')">
+                📂 ${mes} ${año}
+              </button>
+              <span class="badge bg-success fs-6">${totalMes} pedido${totalMes === 1 ? '' : 's'} en total</span>
+            </h4>
+            <div id="${mesId}" style="display: none;"></div>`;
+          container.appendChild(mesDiv);
+
+          const contenedorMes = mesDiv.querySelector(`#${mesId}`);
+          dias.forEach(({ header, pedidos }) => {
+            contenedorMes.appendChild(header);
+            contenedorMes.appendChild(pedidos);
+          });
+        });
+    });
+  };
+
+  const toggleMes = (mesId) => {
+    const contenedor = document.getElementById(mesId);
+    const visible = contenedor.style.display === 'none' ? 'block' : 'none';
+    contenedor.style.display = visible;
+
+    let abiertos = JSON.parse(localStorage.getItem('mesesAbiertos') || '[]');
+    abiertos = visible === 'block'
+      ? [...new Set([...abiertos, mesId])]
+      : abiertos.filter(id => id !== mesId);
+    localStorage.setItem('mesesAbiertos', JSON.stringify(abiertos));
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    restoreScrollAndState();
+    agruparPorAnioYMes();
+
+    const form = document.getElementById('pedidoForm');
+    if (form) {
+      form.addEventListener('submit', () => {
+        localStorage.setItem('scrollY', window.scrollY);
+      });
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      intentarReconectarSocket();
+      if (!isModalActive()) {
+        updateAllGroups();
+      }
+    }
+  });
+
+  window.addEventListener('focus', () => intentarReconectarSocket());
+  window.addEventListener('blur', () => console.debug('Usuario inactivo o cambió de pestaña'));
+
+  window.togglePedidos = togglePedidos;
+  window.toggleMes = toggleMes;
+})();
+</script>
+<script>
+  document.getElementById("featured-3").style.visibility = 'visible';
+const loader = document.getElementById("loader");
+if (loader) loader.remove();
+
+</script>
+
+{% endblock extra_js %}

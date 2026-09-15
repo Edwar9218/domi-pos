@@ -1,0 +1,269 @@
+{% extends 'plantillas/navbar.html' %} 
+{% block title %} Registrar pedidos{%endblock %} 
+{% block estra_css %}
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 20px;
+    background: #f0f0f0;
+    display: flex;
+    justify-content: center;
+  }
+
+  h2 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 18px;
+  }
+  .container_post {
+    width: 100%;
+    max-width: 620px;
+    padding: 10px;
+  }
+
+  .center-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  textarea {
+    width: 55%;
+    height: 300px;
+    font-family: "Courier New", monospace;
+    font-size: 16px;
+    resize: vertical;
+    padding: 10px;
+    border: 1px solid #ccc;
+  }
+
+  .btn {
+    margin-top: 10px;
+    padding: 10px 20px;
+    text-decoration: none;
+    font-size: 16px;
+  }
+  .ticket {
+    width: 100%;
+    max-width: 580px;
+    background: white;
+    padding: 20px;
+    margin-top: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    border: 1px dashed #999;
+  }
+  @media (max-width: 600px) {
+    textarea {
+      width: 100%;
+      height: 250px;
+    }
+    h2 {
+      font-size: 16px;
+    }
+    .btn {
+      padding: 10px 20px;
+      text-decoration: none;
+      width: 100%;
+      font-size: 16px;
+    }
+  }
+</style>
+{% endblock estra_css %} {% block content %}
+<div class="container_post px-4 py-5 mt-5">
+  <h2>Texto POS</h2>
+  <form method="post" class="center-form">
+    {% csrf_token %}
+    <textarea name="txt">{{ form.txt.value|default_if_none:'' }}</textarea>
+  <div class="btns" style="display: flex; gap: 10px;">
+  <button
+    type="button"
+    id="btnPegar"
+    class="btn btn-warning"
+  >
+    Pegar
+  </button>
+<!--<button
+  type="submit"
+  name="accion"
+  value="registrar"
+  class="btn btn-primary"
+  id="btnRegistrar"
+>
+  Registrar pedido
+</button> -->
+  <button
+    type="submit"
+    name="accion"
+    value="imprimir"
+    class="btn btn-success"
+    id="btnImpre"
+  >
+    Imprimir texto
+  </button>
+  
+</div>
+  </form>
+</div>
+{% endblock %} 
+
+{% block extra_js %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const textarea = document.querySelector("textarea");
+    const textoFinalVacio = "Total:$\ndomicilio:$\nTotal a pagar el\ncliente:$";
+    const separador = "\n------------------------\n";
+  
+    textarea.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        const cursorPos = textarea.selectionStart;
+  
+        // Buscar bloque final con posibles valores
+        const patronBloqueFinal = /Total:.*\n.*domicilio:.*\n.*Total a pagar el\ncliente.*$/s;
+        const match = textarea.value.match(patronBloqueFinal);
+  
+        if (match) {
+          const inicioBloque = textarea.value.indexOf(match[0]);
+          const finBloque = inicioBloque + match[0].length;
+  
+          // Si el cursor está dentro del bloque final
+          if (cursorPos >= inicioBloque && cursorPos <= finBloque) {
+            // Subcaso: si está justo después de "Total a pagar el cliente" con texto
+            const lineaFinal = match[0].split('\n').pop(); // última línea: Total a pagar el clientexxxx
+            const indexLineaFinal = textarea.value.lastIndexOf(lineaFinal);
+            const finLineaFinal = indexLineaFinal + lineaFinal.length;
+  
+            // Si el cursor está justo al final de esa línea
+            if (cursorPos === finLineaFinal && lineaFinal.trim().length > "cliente".length) {
+              e.preventDefault();
+  
+              const parteAntes = textarea.value.slice(0, cursorPos);
+              const parteDespues = textarea.value.slice(cursorPos);
+  
+              // Insertar separador (sin texto final porque ya existe)
+              textarea.value = parteAntes + separador + parteDespues;
+  
+              const nuevaPos = parteAntes.length + separador.length;
+              textarea.selectionStart = textarea.selectionEnd = nuevaPos;
+              return;
+            }
+  
+            // Si está editando dentro del bloque, permitir Enter normal
+            return;
+          }
+        }
+  
+        // Si no hay bloque final o está fuera del bloque → comportamiento normal del Enter modificado
+        e.preventDefault();
+  
+        const inicio = textarea.selectionStart;
+        const fin = textarea.selectionEnd;
+  
+        const parteAntes = textarea.value.slice(0, inicio);
+        const parteDespues = textarea.value.slice(fin);
+  
+        const contieneTextoFinal = patronBloqueFinal.test(textarea.value);
+  
+        if (contieneTextoFinal) {
+          textarea.value = parteAntes + separador + parteDespues;
+          const nuevaPos = parteAntes.length + separador.length;
+          textarea.selectionStart = textarea.selectionEnd = nuevaPos;
+        } else {
+          textarea.value = parteAntes + separador + parteDespues + textoFinalVacio;
+          const nuevaPos = parteAntes.length + separador.length;
+          textarea.selectionStart = textarea.selectionEnd = nuevaPos;
+        }
+      }
+    });
+  });
+  </script>
+  
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const btnPegar = document.getElementById("btnPegar");
+    const textarea = document.querySelector("textarea");
+
+    btnPegar.addEventListener("click", async function () {
+      try {
+        const texto = await navigator.clipboard.readText(); // Lee del portapapeles
+        if (texto) {
+          // Pegarlo en la posición actual del cursor
+          const inicio = textarea.selectionStart;
+          const fin = textarea.selectionEnd;
+          textarea.value =
+            textarea.value.slice(0, inicio) + texto + textarea.value.slice(fin);
+
+          // Mover cursor después del texto pegado
+          const nuevaPos = inicio + texto.length;
+          textarea.selectionStart = textarea.selectionEnd = nuevaPos;
+          textarea.focus();
+        } else {
+          alert("No hay texto en el portapapeles.");
+        }
+      } catch (err) {
+        alert("No se pudo acceder al portapapeles. Asegúrate de permitir el acceso.");
+      }
+    });
+  });
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const btnRegistrar = document.getElementById("btnRegistrar");
+  btnRegistrar.addEventListener("click", function () {
+    btnRegistrar.disabled = true;        // Desactiva el botón
+    btnRegistrar.textContent = "Procesando..."; // Texto opcional
+    btnRegistrar.form.submit();          // Envía el formulario
+  });
+});
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const btn = document.getElementById("btnImpre");
+  let enviado = false;  // bandera para evitar múltiples envíos
+
+  btn.addEventListener("click", function () {
+    if (enviado) {
+      // Ya se hizo un clic, ignoramos los siguientes
+      return;
+    }
+    enviado = true;
+    setTimeout(() => {
+      btn.disabled = true;
+      btn.textContent = "Imprimiendo...";
+    }, 50);
+  });
+});
+
+</script>
+
+<!-- ✅ Script para guardar y recuperar texto desde localStorage -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const textarea = document.querySelector("textarea");
+    const storageKey = "texto_pos_temporal";
+
+    // Cargar texto guardado
+    const textoGuardado = localStorage.getItem(storageKey);
+    if (textoGuardado !== null && textarea.value.trim() === "") {
+      textarea.value = textoGuardado;
+    }
+
+    // Guardar texto mientras se escribe
+    textarea.addEventListener("input", function () {
+      localStorage.setItem(storageKey, textarea.value);
+    });
+
+    // Limpiar localStorage al enviar formulario
+    const form = textarea.closest("form");
+    form.addEventListener("submit", function () {
+      localStorage.removeItem(storageKey);
+    });
+  });
+</script>
+{% endblock extra_js %}
+
