@@ -5,7 +5,11 @@ function mostrarModalPedido(texto, id) {
 
   document.getElementById("pedidoTexto").value = texto;
   document.getElementById("pedidoForm").action = `/editar/${id}/`;
-  //document.getElementById("btnEliminar").href = `/eliminar/${id}/`;
+
+  const formEliminar = document.getElementById("formEliminar");
+  if (formEliminar) {
+    formEliminar.action = `/eliminar/${id}/`;
+  }
 
   const modal = new bootstrap.Modal(document.getElementById("pedidoModal"));
   modal.show();

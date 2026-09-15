@@ -1,0 +1,150 @@
+{% extends 'plantillas/navbar.html' %}
+{% load static %}
+{% block title %}Confirmar recogida{% endblock %}
+
+{% block estra_css %}
+<style>
+  body {
+    background: #f0f0f0;
+  }
+  .container-recogida {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .pedido-recogida {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.08);
+    border-left: 5px solid #16a34a;
+  }
+  .pedido-recogida.demora-media { border-left-color: #d97706; }
+  .pedido-recogida.demora-alta { border-left-color: #dc2626; background: #fff5f5; }
+  .pedido-recogida-texto {
+    white-space: pre-wrap;
+    margin-bottom: 10px;
+  }
+  .pedido-recogida-tiempo {
+    font-weight: bold;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+  }
+  #estadoConexion {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    z-index: 2000;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    transition: background-color 0.3s ease;
+  }
+  #estadoConexion.en-linea {
+    background: #16a34a;
+  }
+  .fab-spinner {
+    width: 18px;
+    height: 18px;
+    border: 3px solid #e5e7eb;
+    border-top-color: #6b7280;
+    border-radius: 50%;
+    animation: girar-fab 0.8s linear infinite;
+  }
+  @keyframes girar-fab {
+    to { transform: rotate(360deg); }
+  }
+  .fab-check {
+    color: #fff;
+    font-size: 20px;
+    font-weight: bold;
+    line-height: 1;
+  }
+</style>
+{% endblock estra_css %}
+
+{% block content %}
+<div id="estadoConexion" title="conectando...">
+  <div id="fabSpinner" class="fab-spinner"></div>
+  <span id="fabCheck" class="fab-check" style="display:none;">✓</span>
+</div>
+<div class="container-recogida mt-5 pt-4">
+  <h2 class="pb-2 border-bottom">🛵 Confirmar recogida por el domiciliario</h2>
+  <p class="text-muted">Marca aquí cuando el mensajero YA se llevó el pedido. Esto le avisa en vivo a la persona que contacta las mensajerías.</p>
+  <div id="listaRecogida">
+    {% include 'plantillas/recogida_fragment.html' with object_list=object_list %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/reconnecting-websocket.min.js' %}"></script>
+<script>
+(function () {
+  const lista = document.getElementById('listaRecogida');
+  const indicadorConexion = document.getElementById('estadoConexion');
+  const fabSpinner = document.getElementById('fabSpinner');
+  const fabCheck = document.getElementById('fabCheck');
+
+  const marcarConectado = () => {
+    indicadorConexion.classList.add('en-linea');
+    indicadorConexion.title = 'en línea';
+    fabSpinner.style.display = 'none';
+    fabCheck.style.display = 'block';
+  };
+  const marcarDesconectado = () => {
+    indicadorConexion.classList.remove('en-linea');
+    indicadorConexion.title = 'conectando...';
+    fabSpinner.style.display = 'block';
+    fabCheck.style.display = 'none';
+  };
+
+  const recalcularTiempos = () => {
+    const UMBRAL_MEDIO = 10, UMBRAL_ALTO = 20;
+    lista.querySelectorAll('.pedido-recogida').forEach(item => {
+      const creado = new Date(item.dataset.creado);
+      const minutos = Math.max(0, Math.round((Date.now() - creado.getTime()) / 60000));
+      const tiempoEl = item.querySelector('.pedido-recogida-tiempo');
+      item.classList.remove('demora-media', 'demora-alta');
+      if (minutos >= UMBRAL_ALTO) item.classList.add('demora-alta');
+      else if (minutos >= UMBRAL_MEDIO) item.classList.add('demora-media');
+      if (tiempoEl) {
+        tiempoEl.textContent = minutos <= 0 ? '⏱ recién despachado' : `⏱ esperando hace ${minutos} min`;
+      }
+    });
+  };
+
+  const cargarLista = () => {
+    fetch('{% url "confirmar_recogida" %}')
+      .then(res => res.text())
+      .then(html => {
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        const nuevaLista = temp.querySelector('#listaRecogida');
+        if (nuevaLista) {
+          lista.innerHTML = nuevaLista.innerHTML;
+          recalcularTiempos();
+        }
+      })
+      .catch(() => {});
+  };
+
+  recalcularTiempos();
+  setInterval(recalcularTiempos, 60000);
+  setInterval(cargarLista, 30000);
+
+  const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/productos/`;
+  let socket = new ReconnectingWebSocket(wsUrl);
+  socket.onopen = () => { marcarConectado(); cargarLista(); };
+  socket.onclose = marcarDesconectado;
+  socket.onerror = marcarDesconectado;
+  socket.onmessage = cargarLista;
+})();
+</script>
+{% endblock extra_js %}

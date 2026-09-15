@@ -14,6 +14,13 @@
         {% if "Nuevo" in obj.txt %}
           <span class="badge bg-warning text-dark ms-2">Nuevo</span>
         {% endif %}
+        {% if obj.despachado %}
+          {% if obj.recogido %}
+            <span class="badge bg-success ms-2">✅ recogido</span>
+          {% else %}
+            <span class="badge bg-danger ms-2">🛵 esperando</span>
+          {% endif %}
+        {% endif %}
       </h3>
       <p>{{ obj.txt }}</p>
     </div>

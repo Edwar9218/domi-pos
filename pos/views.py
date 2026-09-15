@@ -14,6 +14,37 @@ from .util import imprimir_texto
 from datetime import datetime, date
 import pytz
 
+# Para imprimir sin bloquear la respuesta HTTP
+import threading
+
+
+def _imprimir_en_segundo_plano(pedido_id, texto_impresion):
+    """
+    Corre en un hilo aparte para que la petición del celular no se quede
+    esperando a la impresora. imprimir_texto() ahora consulta la cola de
+    Windows para saber si el ticket realmente salió (no solo si el comando
+    se envió sin errores). Guarda el resultado con .save() normal para
+    que dispare la señal post_save y así todas las pantallas conectadas
+    (cocina, celular) se enteren del cambio en vivo.
+    """
+    try:
+        exito = imprimir_texto(texto_impresion)
+        producto = Producto.objects.get(pk=pedido_id)
+        if exito:
+            producto.impreso = True
+            producto.despachado = True
+        else:
+            producto.impreso = False
+        producto.save()
+    except Exception as e:
+        print(f"Error al imprimir: {e}")
+        try:
+            producto = Producto.objects.get(pk=pedido_id)
+            producto.impreso = False
+            producto.save()
+        except Exception as e2:
+            print(f"Error guardando estado de impresión fallida: {e2}")
+
 class TxtCreateView(CreateView):
     model = Producto
     fields = ['txt']
@@ -38,23 +69,30 @@ class TxtCreateView(CreateView):
         accion = self.request.POST.get("accion")
         #print(self.request.POST)
         if accion == 'imprimir':
-            #print('impre','/'*10)
-            try:
-                texto = form.instance.txt 
-                # Obtener hora local y formatear
-                zona_local = pytz.timezone("America/Bogota")  # Ajusta según tu zona
-                ahora = datetime.now(zona_local)
-                fecha_hora = ahora.strftime("%d/%m/%Y %H:%M:%S")
-                # Agregar dos saltos de línea + fecha y hora
-                texto += "\n" +  f' \n{fecha_hora}'
-                texto = texto.encode('latin-1', 'ignore').decode('latin-1')
-                imprimir_texto(texto)
-                # Marcar como despachado y guardar
-                form.instance.despachado = True
-                form.instance.save()
-                return redirect(reverse('producto_create'))
-            except Exception as e:
-                print(f"Error al imprimir: {e}")
+            # Preparamos el texto que va a la impresora
+            texto = form.instance.txt
+            zona_local = pytz.timezone("America/Bogota")  # Ajusta según tu zona
+            ahora = datetime.now(zona_local)
+            fecha_hora = ahora.strftime("%d/%m/%Y %H:%M:%S")
+            texto_impresion = texto + "\n" + f' \n{fecha_hora}'
+            texto_impresion = texto_impresion.encode('latin-1', 'ignore').decode('latin-1')
+
+            # Guardamos el pedido YA (impreso=None = "en proceso") para que
+            # el celular obtenga respuesta al instante y cocina lo vea aparecer.
+            form.instance.impreso = None
+            form.instance.despachado = False
+            form.instance.save()
+            pedido_id = form.instance.pk
+
+            # La impresión real se hace en un hilo aparte, así la petición
+            # del celular no se queda "cargando" esperando a la impresora.
+            threading.Thread(
+                target=_imprimir_en_segundo_plano,
+                args=(pedido_id, texto_impresion),
+                daemon=True,
+            ).start()
+
+            return redirect(f"{reverse('producto_create')}?check={pedido_id}")
         return super().form_valid(form)
     
 
@@ -108,6 +146,20 @@ class DespacharProductoView(View):
         return redirect(reverse('producto_create'))
 
 
+class EliminarPedidoView(View):
+    def post(self, request, pk):
+        producto = get_object_or_404(Producto, pk=pk)
+
+        # 🔒 Medida de seguridad del lado del servidor: un pedido ya
+        # despachado NUNCA se borra desde aquí, sin importar lo que
+        # mande el navegador. Solo se pueden borrar pendientes.
+        if producto.despachado:
+            return redirect(f"{reverse('producto_listar')}?estado=despachado")
+
+        producto.delete()
+        return redirect(f"{reverse('producto_listar')}?estado=pendiente")
+
+
 def pedidos_por_fecha(request):
     fecha_str = request.GET.get("fecha")
     estado = request.GET.get("estado", "pendiente")
@@ -128,3 +180,51 @@ def pedidos_por_fecha(request):
         "today_date": fecha_str,
     })
     return JsonResponse({"html": html})
+
+
+def estado_impresion(request, pk):
+    """
+    El celular consulta este endpoint cada pocos segundos después de dar
+    'Imprimir' para saber si ya salió el ticket o si falló, sin tener que
+    preguntarle a cocina.
+    impreso: null = en proceso, true = impreso ok, false = falló
+    """
+    producto = get_object_or_404(Producto, pk=pk)
+    return JsonResponse({"impreso": producto.impreso})
+
+
+def pedidos_esperando_domiciliario_html():
+    """Genera el HTML de la lista de pedidos despachados que aún no
+    ha recogido el domiciliario. Se reutiliza tanto para el primer
+    cargue de la página como para las actualizaciones por AJAX."""
+    pedidos = Producto.objects.filter(despachado=True, recogido=False).order_by('creado_en')
+    return render_to_string("plantillas/esperando_domiciliario_fragment.html", {
+        "pedidos": pedidos,
+    })
+
+
+def pedidos_esperando_domiciliario(request):
+    """La pantalla del celular (donde se escriben los pedidos) consulta
+    esto para pintar/actualizar la lista de 'domicilios que no han salido'."""
+    return JsonResponse({"html": pedidos_esperando_domiciliario_html()})
+
+
+class ConfirmarRecogidaListView(ListView):
+    """Pantalla para que mesero/cocina marque cuándo el domiciliario
+    ya recogió físicamente el pedido."""
+    model = Producto
+    template_name = "plantillas/confirmar_recogida.html"
+    context_object_name = "object_list"
+
+    def get_queryset(self):
+        return Producto.objects.filter(despachado=True, recogido=False).order_by('creado_en')
+
+
+class ConfirmarRecogidaView(View):
+    def post(self, request, pk):
+        producto = get_object_or_404(Producto, pk=pk)
+        producto.recogido = True
+        from django.utils import timezone
+        producto.recogido_en = timezone.now()
+        producto.save()
+        return redirect(reverse('confirmar_recogida'))

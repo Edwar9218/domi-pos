@@ -1,0 +1,16 @@
+{% if not object_list %}
+  <p class="text-muted">✅ No hay pedidos esperando domiciliario en este momento.</p>
+{% else %}
+  {% for p in object_list %}
+    <div class="pedido-recogida" data-creado="{{ p.creado_en|date:'c' }}">
+      <div class="pedido-recogida-tiempo">⏱ calculando...</div>
+      <div class="pedido-recogida-texto">{{ p.txt }}</div>
+      <form method="post" action="{% url 'confirmar_recogida_pedido' p.id %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success btn-sm">
+          ✅ El domiciliario ya lo recogió
+        </button>
+      </form>
+    </div>
+  {% endfor %}
+{% endif %}

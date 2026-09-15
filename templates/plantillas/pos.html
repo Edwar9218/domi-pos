@@ -1,4 +1,5 @@
-{% extends 'plantillas/navbar.html' %} 
+{% extends 'plantillas/navbar.html' %}
+{% load static %}
 {% block title %} Registrar pedidos{%endblock %} 
 {% block estra_css %}
 <style>
@@ -72,9 +73,84 @@
       font-size: 16px;
     }
   }
+
+  .panel-esperando-domi {
+    max-width: 620px;
+    margin: 0 auto;
+  }
+  .alerta-domi {
+    background: white;
+    border-left: 5px solid #16a34a;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    box-shadow: 0 0 6px rgba(0,0,0,0.08);
+  }
+  .alerta-domi.demora-media {
+    border-left-color: #d97706;
+  }
+  .alerta-domi.demora-alta {
+    border-left-color: #dc2626;
+    background: #fff5f5;
+  }
+  .alerta-domi-tiempo {
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: #16a34a;
+  }
+  .alerta-domi.demora-media .alerta-domi-tiempo {
+    color: #d97706;
+  }
+  .alerta-domi.demora-alta .alerta-domi-tiempo {
+    color: #dc2626;
+  }
+  .alerta-domi-texto {
+    white-space: pre-wrap;
+    font-size: 0.95rem;
+    margin-top: 4px;
+  }
+
+  /* 🟢 FAB flotante de estado de conexión */
+  #estadoConexion {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    z-index: 2000;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    transition: background-color 0.3s ease;
+  }
+  #estadoConexion.en-linea {
+    background: #16a34a;
+  }
+  .fab-spinner {
+    width: 18px;
+    height: 18px;
+    border: 3px solid #e5e7eb;
+    border-top-color: #6b7280;
+    border-radius: 50%;
+    animation: girar-fab 0.8s linear infinite;
+  }
+  @keyframes girar-fab {
+    to { transform: rotate(360deg); }
+  }
+  .fab-check {
+    color: #fff;
+    font-size: 20px;
+    font-weight: bold;
+    line-height: 1;
+  }
 </style>
 {% endblock estra_css %} {% block content %}
 <div class="container_post px-4 py-5 mt-5">
+  <!-- Banner de estado de impresión: aparece solo si venimos de dar clic en "Imprimir" -->
+  <div id="estadoImpresion" style="display:none; text-align:center; padding:12px; border-radius:8px; margin-bottom:15px; font-weight:bold;"></div>
   <h2>Texto POS</h2>
   <form method="post" class="center-form">
     {% csrf_token %}
@@ -108,6 +184,23 @@
   
 </div>
   </form>
+
+  <!-- 🛵 Domicilios que ya están listos pero el mensajero aún no ha recogido -->
+  <div class="panel-esperando-domi mt-4">
+    <h4 class="d-flex align-items-center justify-content-between">
+      <span>🛵 Domicilios esperando mensajero</span>
+      <span id="badgeEsperandoDomi" class="badge bg-secondary">0</span>
+    </h4>
+    <div id="listaEsperandoDomi">
+      <p class="text-muted mb-0">Cargando...</p>
+    </div>
+  </div>
+</div>
+
+<!-- 🟢 FAB flotante de estado de conexión -->
+<div id="estadoConexion" title="conectando...">
+  <div id="fabSpinner" class="fab-spinner"></div>
+  <span id="fabCheck" class="fab-check" style="display:none;">✓</span>
 </div>
 {% endblock %} 
 
@@ -226,11 +319,32 @@ document.addEventListener("DOMContentLoaded", function () {
   const btn = document.getElementById("btnImpre");
   let enviado = false;  // bandera para evitar múltiples envíos
 
-  btn.addEventListener("click", function () {
+  btn.addEventListener("click", function (e) {
     if (enviado) {
       // Ya se hizo un clic, ignoramos los siguientes
+      e.preventDefault();
       return;
     }
+
+    // 🔴 Antes de enviar, verificamos que el socket (el mismo que ya
+    // usa el panel de domicilios) esté realmente conectado. Si no lo
+    // está, NO dejamos que se quede "cargando" sin explicación:
+    // avisamos claro y forzamos una reconexión inmediata.
+    if (typeof window.hayConexionServidor === 'function' && !window.hayConexionServidor()) {
+      e.preventDefault();
+      const banner = document.getElementById("estadoImpresion");
+      if (banner) {
+        banner.style.display = "block";
+        banner.style.color = "#842029";
+        banner.style.backgroundColor = "#f8d7da";
+        banner.textContent = "⚠️ Sin conexión con el servidor. Espera a que el punto de abajo a la derecha se ponga verde ✓ e inténtalo de nuevo.";
+      }
+      if (typeof window.forzarReconexion === 'function') {
+        window.forzarReconexion();
+      }
+      return;
+    }
+
     enviado = true;
     setTimeout(() => {
       btn.disabled = true;
@@ -264,6 +378,190 @@ document.addEventListener("DOMContentLoaded", function () {
       localStorage.removeItem(storageKey);
     });
   });
+</script>
+<!-- ✅ Consulta si el ticket ya se imprimió, sin tener que preguntarle a cocina -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const params = new URLSearchParams(window.location.search);
+  const pedidoId = params.get("check");
+  if (!pedidoId) return;
+
+  const banner = document.getElementById("estadoImpresion");
+  const mostrarBanner = (texto, color, fondo) => {
+    banner.style.display = "block";
+    banner.style.color = color;
+    banner.style.backgroundColor = fondo;
+    banner.textContent = texto;
+  };
+
+  mostrarBanner("🖨️ Imprimiendo pedido, espera un momento...", "#664d03", "#fff3cd");
+
+  let intentos = 0;
+  const maxIntentos = 30; // 30 x 2s = 1 minuto máximo esperando
+
+  const consultar = () => {
+    fetch(`/estado-impresion/${pedidoId}/`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.impreso === true) {
+          mostrarBanner("✅ Se envió a la impresora sin errores.", "#0f5132", "#d1e7dd");
+        } else if (data.impreso === false) {
+          mostrarBanner("❌ La impresora reportó un error (sin papel, apagada o atascada).", "#842029", "#f8d7da");
+        } else {
+          intentos++;
+          if (intentos >= maxIntentos) {
+            mostrarBanner("⚠️ No se pudo confirmar si imprimió. Verifica.", "#664d03", "#fff3cd");
+            return;
+          }
+          setTimeout(consultar, 2000);
+        }
+      })
+      .catch(() => {
+        intentos++;
+        if (intentos < maxIntentos) setTimeout(consultar, 2000);
+      });
+  };
+
+  consultar();
+
+  // Limpia el "?check=" de la URL para que un refresh no vuelva a consultar
+  const urlLimpia = window.location.pathname;
+  window.history.replaceState({}, document.title, urlLimpia);
+});
+</script>
+
+<!-- 🛵 Panel en vivo de domicilios esperando mensajero -->
+<script src="{% static 'js/reconnecting-websocket.min.js' %}"></script>
+<script>
+(function () {
+  const lista = document.getElementById('listaEsperandoDomi');
+  const badge = document.getElementById('badgeEsperandoDomi');
+  if (!lista) return;
+
+  // Umbrales de demora (en minutos) para cambiar el color de la alerta
+  const UMBRAL_MEDIO = 10;
+  const UMBRAL_ALTO = 20;
+
+  const recalcularTiempos = () => {
+    const items = lista.querySelectorAll('.alerta-domi');
+    items.forEach(item => {
+      const creado = new Date(item.dataset.creado);
+      const minutos = Math.max(0, Math.round((Date.now() - creado.getTime()) / 60000));
+      const spanTiempo = item.querySelector('.alerta-domi-tiempo');
+
+      item.classList.remove('demora-media', 'demora-alta');
+      if (minutos >= UMBRAL_ALTO) {
+        item.classList.add('demora-alta');
+      } else if (minutos >= UMBRAL_MEDIO) {
+        item.classList.add('demora-media');
+      }
+
+      if (spanTiempo) {
+        spanTiempo.textContent = minutos <= 0
+          ? '⏱ recién despachado'
+          : `⏱ esperando hace ${minutos} min`;
+      }
+    });
+  };
+
+  const actualizarBadge = () => {
+    const total = lista.querySelectorAll('.alerta-domi').length;
+    if (badge) {
+      badge.textContent = total;
+      badge.className = 'badge ' + (total === 0 ? 'bg-secondary' : (total >= 3 ? 'bg-danger' : 'bg-warning text-dark'));
+    }
+  };
+
+  const cargarLista = () => {
+    fetch('/pedidos-esperando-domiciliario/')
+      .then(res => res.json())
+      .then(data => {
+        lista.innerHTML = data.html;
+        recalcularTiempos();
+        actualizarBadge();
+      })
+      .catch(() => {});
+  };
+
+  cargarLista();
+  recalcularTiempos();
+  actualizarBadge();
+
+  // Refresca el tiempo transcurrido (sin ir al servidor) cada minuto
+  setInterval(recalcularTiempos, 60000);
+  // Red de seguridad por si el socket falla en avisar
+  setInterval(cargarLista, 30000);
+
+  // Websocket: cualquier cambio de pedidos (nuevo, despachado, recogido)
+  // vuelve a pedir la lista actualizada al servidor.
+  const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/productos/`;
+  let socket;
+
+  const indicadorConexion = document.getElementById('estadoConexion');
+  const fabSpinner = document.getElementById('fabSpinner');
+  const fabCheck = document.getElementById('fabCheck');
+  const marcarConectado = () => {
+    if (!indicadorConexion) return;
+    indicadorConexion.classList.add('en-linea');
+    indicadorConexion.title = 'en línea';
+    if (fabSpinner) fabSpinner.style.display = 'none';
+    if (fabCheck) fabCheck.style.display = 'block';
+  };
+  const marcarDesconectado = () => {
+    if (!indicadorConexion) return;
+    indicadorConexion.classList.remove('en-linea');
+    indicadorConexion.title = 'conectando...';
+    if (fabSpinner) fabSpinner.style.display = 'block';
+    if (fabCheck) fabCheck.style.display = 'none';
+  };
+
+  const conectarSocket = () => {
+    socket = new ReconnectingWebSocket(wsUrl);
+    socket.onopen = () => { marcarConectado(); cargarLista(); };
+    socket.onclose = marcarDesconectado;
+    socket.onerror = marcarDesconectado;
+    socket.onmessage = cargarLista;
+  };
+
+  conectarSocket();
+
+  // Se exponen para que otros scripts de esta misma página (el botón
+  // "Imprimir" y el textarea) puedan preguntar el estado real y forzar
+  // una reconexión, sin duplicar la lógica del socket.
+  window.hayConexionServidor = () => !!(socket && socket.readyState === WebSocket.OPEN);
+  window.forzarReconexion = () => {
+    if (!socket || (socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING)) {
+      conectarSocket();
+    }
+  };
+
+  // 🔴 Apenas la persona empieza a escribir un pedido, si el socket no
+  // está conectado (por ejemplo, llevaba rato sin usar el sistema y la
+  // conexión se cayó en silencio), se intenta reconectar de una vez —
+  // así, para cuando le dé clic a "Imprimir", ya hay tiempo de sobra
+  // para que la conexión esté lista y no se quede cargando.
+  const textareaPedido = document.querySelector('textarea[name="txt"]');
+  if (textareaPedido) {
+    let yaVerificoAlEscribir = false;
+    textareaPedido.addEventListener('input', () => {
+      if (yaVerificoAlEscribir) return;
+      yaVerificoAlEscribir = true;
+      window.forzarReconexion();
+    });
+  }
+
+  // Si el celular se bloquea, cambia de pestaña o la pierde de vista un
+  // rato (muy común dejando el sistema sin usar), al volver a mirarla
+  // se fuerza reconexión + se refresca el panel, igual que ya se hace
+  // en la pantalla de cocina.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      window.forzarReconexion();
+      cargarLista();
+    }
+  });
+  window.addEventListener('focus', () => window.forzarReconexion());
+})();
 </script>
 {% endblock extra_js %}
 

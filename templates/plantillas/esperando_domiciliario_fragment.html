@@ -1,0 +1,13 @@
+{% load tz %}
+{% if not pedidos %}
+  <p class="text-muted mb-0">✅ No hay domicilios esperando mensajero.</p>
+{% else %}
+  {% for p in pedidos %}
+    <div class="alerta-domi" data-creado="{{ p.creado_en|date:'c' }}">
+      <div class="alerta-domi-header">
+        <span class="alerta-domi-tiempo" data-minutos="0">⏱ calculando...</span>
+      </div>
+      <div class="alerta-domi-texto">{{ p.txt|linebreaksbr }}</div>
+    </div>
+  {% endfor %}
+{% endif %}
