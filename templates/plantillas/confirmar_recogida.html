@@ -23,7 +23,18 @@
   .pedido-recogida.demora-media { border-left-color: #d97706; }
   .pedido-recogida.demora-alta { border-left-color: #dc2626; }
   .pedido-recogida-texto {
+    /* 📏 Mismo ancho de contenido (310px), fuente y tamaño que el
+       textarea de "Registrar pedido" -- ver el detalle en pos.html
+       (.alerta-domi-texto). Así un pedido de 5 renglones en el papel
+       se ve de 5 renglones acá también, no reacomodado al ancho de
+       esta tarjeta. */
+    width: 310px;
+    max-width: 100%;
+    font-family: "Courier New", monospace;
+    font-size: 16px;
     white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
     margin-bottom: 10px;
   }
   .pedido-recogida-tiempo {

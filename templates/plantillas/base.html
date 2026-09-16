@@ -75,9 +75,14 @@
       h2, .h2 { font-size: 1.45rem !important; font-weight: 700 !important; }
       h3, .h3 { font-size: 1.15rem !important; font-weight: 700 !important; }
       h4, .h4 { font-size: 1rem !important; }
-      p, .lead, .alerta-domi-texto, .pedido-recogida-texto, #pedidoTexto {
+      p, .lead {
         font-size: 0.95rem !important;
       }
+      /* 📏 .alerta-domi-texto, .pedido-recogida-texto y #pedidoTexto NO
+         van acá a propósito: tienen que medir EXACTAMENTE lo mismo que
+         el textarea de "Registrar pedido" (16px, Courier New) para que
+         un pedido se reparta en las mismas líneas en todas las
+         pantallas -- ver el detalle en cada archivo. */
       small, .small, .text-muted, .alerta-domi-tiempo, .pedido-recogida-tiempo {
         font-size: 0.82rem !important;
       }

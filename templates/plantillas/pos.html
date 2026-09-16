@@ -139,8 +139,20 @@
     color: #dc2626;
   }
   .alerta-domi-texto {
+    /* 📏 Mismo ancho de contenido (310px = 330px del textarea menos sus
+       10px de padding a cada lado), la misma fuente monoespaciada y el
+       mismo tamaño de letra (16px) que el textarea -- así el texto se
+       reparte en EXACTAMENTE las mismas líneas acá que en el textarea
+       (y por lo tanto que en el papel). Si no, esta tarjeta envuelve el
+       texto a su propio ancho/tamaño, y un pedido de 5 renglones en el
+       papel podía verse de 3 o de 7 acá. */
+    width: 310px;
+    max-width: 100%;
+    font-family: "Courier New", monospace;
+    font-size: 16px;
     white-space: pre-wrap;
-    font-size: 0.95rem;
+    overflow-wrap: break-word;
+    word-break: break-word;
     margin-top: 4px;
   }
 

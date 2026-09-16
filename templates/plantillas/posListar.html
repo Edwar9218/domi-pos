@@ -21,15 +21,26 @@
     -webkit-line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    overflow-wrap: break-word;
+    word-break: break-word;
     text-overflow: ellipsis;
     line-height: 1.5em;
     min-height: calc(1.5em * 4);
   }
 
   #pedidoTexto {
+    /* 📏 Mismo ancho de contenido (310px), fuente y tamaño que el
+       textarea de "Registrar pedido" -- ver el detalle en pos.html
+       (.alerta-domi-texto). Antes esto usaba la fuente normal a
+       1.1rem, así que un pedido se veía repartido en líneas distintas
+       acá que en el papel. */
+    width: 310px;
+    max-width: 100%;
+    font-family: "Courier New", monospace;
+    font-size: 16px;
     white-space: pre-wrap;
-    word-wrap: break-word;
-    font-size: 1.1rem;
+    overflow-wrap: break-word;
+    word-break: break-word;
     max-height: 50vh;
     overflow-y: auto;
   }
