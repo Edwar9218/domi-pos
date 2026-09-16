@@ -135,6 +135,60 @@
       .catch(() => {});
   };
 
+  // ⚡ Antes, dar clic en "El domiciliario ya lo recogió" recargaba toda
+  // la página (HTML + CSS + JS + reconexión de WebSocket incluida) solo
+  // para tachar un pedido de una lista. Ahora se manda por fetch() sin
+  // recargar nada -- el guardado ya avisa por WebSocket, y ese mismo
+  // aviso es el que hace que esta lista se refresque sola
+  // (cargarListaDebounced más abajo), así que no hay que hacer nada más
+  // acá que esperar la respuesta.
+  //
+  // Se engancha en "lista" (el contenedor), no en cada <form> -- así
+  // sigue funcionando después de que cargarLista() reemplaza el HTML de
+  // adentro, sin tener que re-enganchar nada.
+  //
+  // 🛡️ De paso, esto es lo que le faltaba a este botón: un candado
+  // contra doble clic. Si alguien lo toca dos veces seguido (muy común
+  // en celular), el segundo toque no hace nada mientras el primero
+  // sigue en camino -- antes cada toque mandaba su propio POST completo.
+  lista.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+
+    event.preventDefault();
+
+    const boton = form.querySelector('button[type="submit"]');
+    if (boton && boton.disabled) return; // ya se está procesando, ignorar
+
+    const textoOriginal = boton ? boton.textContent : '';
+    if (boton) {
+      boton.disabled = true;
+      boton.textContent = 'Confirmando...';
+    }
+
+    fetch(form.action, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('respuesta no OK');
+        // No hace falta tocar el DOM acá: el aviso por WebSocket ya
+        // viene en camino y va a refrescar la lista solo.
+      })
+      .catch(() => {
+        // Si falla (sin conexión, servidor caído, etc.) reactivamos el
+        // botón para que la persona pueda intentarlo de nuevo -- sin
+        // esto, un error de red dejaría el botón bloqueado para
+        // siempre.
+        if (boton) {
+          boton.disabled = false;
+          boton.textContent = textoOriginal;
+        }
+        alert('No se pudo confirmar. Verifica tu conexión e inténtalo de nuevo.');
+      });
+  });
+
   // 🛡️ Si llegan dos mensajes del websocket casi al mismo tiempo, evita
   // disparar dos fetch() seguidos — solo se hace el último.
   const debounce = (fn, esperaMs) => {

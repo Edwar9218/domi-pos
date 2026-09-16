@@ -267,4 +267,16 @@ class ConfirmarRecogidaView(View):
         from django.utils import timezone
         producto.recogido_en = timezone.now()
         producto.save()
+
+        # El guardado ya dispara la señal que avisa por WebSocket a
+        # todas las pantallas de "Confirmar recogida" abiertas (incluida
+        # esta misma), y esas pantallas ya se refrescan solas al recibir
+        # el aviso. Si la petición vino por fetch() (ver
+        # recogida_fragment.html), no hace falta mandar de vuelta una
+        # redirección con el HTML completo de la página -- basta con un
+        # OK liviano. Si vino de un <form> normal (JS desactivado, o
+        # algo falló al engancharse), se sigue redirigiendo como antes.
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'ok': True})
+
         return redirect(reverse('confirmar_recogida'))
