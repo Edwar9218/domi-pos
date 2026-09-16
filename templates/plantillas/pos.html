@@ -416,9 +416,20 @@ document.addEventListener("DOMContentLoaded", function () {
     const textarea = document.querySelector("textarea");
     const storageKey = "texto_pos_temporal";
 
-    // Cargar texto guardado
+    // 🎯 Si esta página se cargó justo después de un envío exitoso
+    // (viene con "?check=" en la URL, puesto por el servidor al
+    // redirigir), el pedido que estaba en el borrador YA se guardó.
+    // No hay que restaurarlo -- eso dejaría el texto del pedido
+    // anterior pegado en la pantalla, dando la impresión de que no se
+    // envió. Se borra de una vez, en el primer momento posible.
+    const esConfirmacionDeEnvio = new URLSearchParams(window.location.search).has("check");
+    if (esConfirmacionDeEnvio) {
+      localStorage.removeItem(storageKey);
+    }
+
+    // Cargar texto guardado (solo si NO es una confirmación de envío)
     const textoGuardado = localStorage.getItem(storageKey);
-    if (textoGuardado !== null && textarea.value.trim() === "") {
+    if (!esConfirmacionDeEnvio && textoGuardado !== null && textarea.value.trim() === "") {
       textarea.value = textoGuardado;
     }
 
@@ -427,11 +438,17 @@ document.addEventListener("DOMContentLoaded", function () {
       localStorage.setItem(storageKey, textarea.value);
     });
 
-    // Limpiar localStorage al enviar formulario
-    const form = textarea.closest("form");
-    form.addEventListener("submit", function () {
-      localStorage.removeItem(storageKey);
-    });
+    // 🔴 A propósito NO se borra en el evento "submit" del formulario.
+    // Ese evento se dispara apenas la persona hace clic, ANTES de saber
+    // si la petición realmente llegó al servidor -- si se cae el wifi,
+    // el servidor no responde, o hay cualquier error de red a mitad de
+    // camino, el navegador se queda en esta misma página pero ya
+    // habríamos borrado el pedido guardado, perdiéndolo sin haberlo
+    // guardado en ningún lado. El borrado real pasa más arriba en este
+    // mismo bloque (y de respaldo en el que atiende "?check=" más abajo)
+    // -- eso SOLO se ejecuta cuando el
+    // servidor ya confirmó el guardado y redirigió de vuelta, que es la
+    // única señal confiable de que el pedido sí quedó a salvo.
   });
 </script>
 <!-- ✅ Aviso de que el pedido se mandó a imprimir. Antes acá se consultaba
@@ -462,6 +479,12 @@ document.addEventListener("DOMContentLoaded", function () {
       }, { once: true });
     }, 3000);
   }
+
+  // ✅ Acá SÍ es seguro borrar el borrador guardado: llegar hasta este
+  // punto (con "?check=" en la URL, puesto por el servidor al redirigir)
+  // significa que el pedido ya quedó guardado en la base de datos. No
+  // hay riesgo de perder el texto por un error de red a mitad de camino.
+  localStorage.removeItem("texto_pos_temporal");
 
   // Limpia el "?check=" de la URL para que un refresh no lo vuelva a mostrar
   const urlLimpia = window.location.pathname;
