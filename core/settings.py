@@ -85,6 +85,18 @@ CHANNEL_LAYERS = {
     },
 }
 
+# Cache en memoria del propio proceso. Igual que CHANNEL_LAYERS de arriba,
+# solo sirve mientras el servidor corra en UN SOLO proceso (que es como
+# corre hoy) -- si algún día se despliega con más de un proceso/worker,
+# cada uno tendría su propia caché separada y habría que pasar esto (y
+# el channel layer) a Redis.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'domi-pos-cache',
+    }
+}
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

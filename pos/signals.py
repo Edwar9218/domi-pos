@@ -10,8 +10,10 @@ import logging
 from django.db.models.signals import post_save
 from django.db import transaction
 from django.dispatch import receiver
+from django.core.cache import cache
 from .models import Producto
 from .background import background_executor
+from .cache_keys import PEDIDOS_ESPERANDO_DOMICILIARIO
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.utils.timezone import localtime, make_aware, is_naive
@@ -73,6 +75,12 @@ def notificar_producto(sender, instance, created, **kwargs):
     # Ademas, el envio real sigue sin bloquear: se manda al pool de hilos
     # acotado (background_executor) para que ni el .save() ni el on_commit
     # esperen a que el websocket responda.
-    transaction.on_commit(
-        lambda: background_executor.submit(_enviar_notificacion, fecha_str)
-    )
+    def _al_confirmar_commit():
+        # Se invalida el fragmento cacheado de "domicilios esperando
+        # mensajero" ANTES de avisar por WS -- así, para cuando el
+        # navegador reciba el aviso y vuelva a pedirlo, ya encuentra la
+        # version fresca (no la vieja que seguia en cache).
+        cache.delete(PEDIDOS_ESPERANDO_DOMICILIARIO)
+        background_executor.submit(_enviar_notificacion, fecha_str)
+
+    transaction.on_commit(_al_confirmar_commit)

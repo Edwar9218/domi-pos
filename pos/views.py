@@ -5,11 +5,13 @@ from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.http import JsonResponse
 from django.template.loader import render_to_string
+from django.core.cache import cache
 
 # Modelos y utilidades locales
 from .models import Producto
 from .util import imprimir_texto
 from .background import background_executor
+from .cache_keys import PEDIDOS_ESPERANDO_DOMICILIARIO
 
 # Fechas y zona horaria
 from datetime import datetime, date, timedelta
@@ -218,11 +220,27 @@ def pedidos_por_fecha(request):
 def pedidos_esperando_domiciliario_html():
     """Genera el HTML de la lista de pedidos despachados que aún no
     ha recogido el domiciliario. Se reutiliza tanto para el primer
-    cargue de la página como para las actualizaciones por AJAX."""
+    cargue de la página como para las actualizaciones por AJAX.
+
+    Es el endpoint más golpeado de todo el sistema (cada pantalla lo
+    pide al cargar, cada 30s de respaldo, y cada vez que llega un aviso
+    por WebSocket), así que se cachea. La caché se invalida en
+    signals.py apenas cambia CUALQUIER Producto -- no hay un tiempo de
+    espera "a ver si ya pasó suficiente", se borra exactamente cuando
+    hace falta. El timeout de acá es solo un respaldo por si algún día
+    algo guarda un Producto sin pasar por la señal (poco probable, pero
+    más vale no depender de que nunca pase).
+    """
+    html = cache.get(PEDIDOS_ESPERANDO_DOMICILIARIO)
+    if html is not None:
+        return html
+
     pedidos = Producto.objects.filter(despachado=True, recogido=False).order_by('creado_en')
-    return render_to_string("plantillas/esperando_domiciliario_fragment.html", {
+    html = render_to_string("plantillas/esperando_domiciliario_fragment.html", {
         "pedidos": pedidos,
     })
+    cache.set(PEDIDOS_ESPERANDO_DOMICILIARIO, html, timeout=300)
+    return html
 
 
 def pedidos_esperando_domiciliario(request):
