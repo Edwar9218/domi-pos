@@ -192,7 +192,7 @@
   {% regroup object_list by creado_en.date as pedidos_por_fecha %}
   {% for group in pedidos_por_fecha %}
     {% with group.grouper|date:'Y-m-d' as fecha_id %}
-      <h4 class="fecha-group d-flex align-items-center justify-content-between">
+      <h4 class="fecha-group d-flex align-items-center justify-content-between" data-fecha="{{ fecha_id }}">
   <button type="button" class="fecha-btn" onclick="togglePedidos('{{ fecha_id }}')">
     📅 {{ group.grouper|date:"l, d \\d\\e F \\d\\e Y" }}
   </button>
@@ -200,9 +200,6 @@
     🧾 {{ group.list|length }} pedido{{ group.list|length|pluralize }}
   </span>
 </h4>
-
-
-      </h4>
       <div id="pedidos-{{ fecha_id }}" class="row g-4 py-2 row-cols-1 row-cols-lg-3"
            style="display: none;"
 >
@@ -383,11 +380,47 @@
     marcarDesconectado();
   };
 
-  socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+  // 🔄 Igual que en la pantalla de registrar pedido: si el ID que manda el
+  // servidor al conectar no coincide con el que se guardó al cargar la
+  // página, es porque el servidor se reinició mientras tanto — se recarga
+  // sola para traer el HTML/JS más reciente.
+  //
+  // Con un cuidado extra acá: si la persona tiene el modal de "Editar
+  // pedido" abierto justo en ese momento, NO se recarga de una — se
+  // perdería lo que estaba editando sin guardar. Se espera a que cierre
+  // el modal (o lo guarde) y ahí sí se recarga.
+  let reinicioPendiente = false;
+  const recargarPorReinicioServidor = () => {
+    // Se guarda la posición del scroll (igual que ya se hace al enviar el
+    // formulario de edición) para que restoreScrollAndState() la recupere
+    // apenas vuelva a cargar la página.
+    localStorage.setItem('scrollY', window.scrollY);
+    window.location.reload();
+  };
+  const manejarPosibleReinicioServidor = (data) => {
+    if (data.tipo !== 'servidor_id') return false;
+    if (!window.SERVER_INSTANCE_ID || data.id === window.SERVER_INSTANCE_ID) {
+      return true; // mismo servidor de siempre, no hay nada que hacer
+    }
+    if (isModalActive()) {
+      reinicioPendiente = true;
+      return true;
+    }
+    const espera = 300 + Math.random() * 1200;
+    setTimeout(recargarPorReinicioServidor, espera);
+    return true;
+  };
+  const modalPedido = document.getElementById('pedidoModal');
+  if (modalPedido) {
+    modalPedido.addEventListener('hidden.bs.modal', () => {
+      if (reinicioPendiente) {
+        reinicioPendiente = false;
+        recargarPorReinicioServidor();
+      }
+    });
+  }
 
-    if (data.tipo === 'actualizar_fecha') {
-      const fechaId = data.fecha;
+  const actualizarGrupoPorFecha = (fechaId) => {
       const grupo = document.getElementById(`pedidos-${fechaId}`);
 
       fetch(`/pedidos-por-fecha/?fecha=${fechaId}&estado={{ estado_actual }}`)
@@ -415,7 +448,7 @@
             });
 
             const htmlGroup = `
-              <h4 class="fecha-group d-flex align-items-center justify-content-between">
+              <h4 class="fecha-group d-flex align-items-center justify-content-between" data-fecha="${fechaId}">
                 <button type="button" class="fecha-btn" onclick="togglePedidos('${fechaId}')">
                   📅 ${fechaFormateada}
                 </button>
@@ -479,6 +512,27 @@
             actualizarContadorMes(mesId);
           }
         });
+  };
+
+  // 🛡️ Si llegan dos avisos casi seguidos para la MISMA fecha (por ejemplo:
+  // se crea el pedido y, segundos después, se guarda otra vez al confirmar
+  // la impresión), se agrupan en un solo fetch por fecha en vez de uno por
+  // cada aviso.
+  const timersPorFecha = new Map();
+  const actualizarGrupoPorFechaDebounced = (fechaId) => {
+    clearTimeout(timersPorFecha.get(fechaId));
+    const temporizador = setTimeout(() => {
+      timersPorFecha.delete(fechaId);
+      actualizarGrupoPorFecha(fechaId);
+    }, 200);
+    timersPorFecha.set(fechaId, temporizador);
+  };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (manejarPosibleReinicioServidor(data)) return;
+    if (data.tipo === 'actualizar_fecha') {
+      actualizarGrupoPorFechaDebounced(data.fecha);
     }
   };
 
@@ -516,73 +570,77 @@
   };
 
   const agruparPorAnioYMes = () => {
+    // 📌 Antes esto leía el texto YA renderizado del botón (ej. "miércoles,
+    // 10 de septiembre de 2026") con una regex que asumía español, y
+    // dependía de que `navigator.language` coincidiera con esa lista fija
+    // de meses en español. Si el navegador tenía otro idioma, o Django
+    // cambiaba el formato de fecha, la agrupación por año/mes se rompía
+    // en silencio (ningún error visible, simplemente dejaba de agrupar).
+    //
+    // Ahora se lee directamente el atributo data-fecha="YYYY-MM-DD" que
+    // pone el servidor (y que también ponen los grupos nuevos insertados
+    // por WS más abajo), así no depende de parsear texto ni del idioma.
     const container = document.getElementById("featured-3");
     const grupos = [...container.querySelectorAll(".fecha-group")];
 
     const estructura = {};
 
     grupos.forEach(grupo => {
-      const btn = grupo.querySelector("button");
-      const fechaTexto = btn?.textContent?.trim();
-      if (!fechaTexto) return;
+      const fechaId = grupo.dataset.fecha;
+      if (!fechaId) return;
 
-      const regex = /(\d{2}) de (\w+) de (\d{4})$/;
-      const match = fechaTexto.match(regex);
-      if (!match) return;
+      const [año, mes] = fechaId.split('-'); // YYYY-MM-DD -> YYYY, MM
+      const mesId = `mes-${año}-${mes}`;
 
-      const [, dia, mes, año] = match;
-
-      if (!estructura[año]) estructura[año] = {};
-      if (!estructura[año][mes]) estructura[año][mes] = [];
-
-      const fechaId = btn.getAttribute("onclick").match(/togglePedidos\('([\d\-]+)'\)/)[1];
       const pedidos = document.getElementById(`pedidos-${fechaId}`);
-
       const resumen = grupo.querySelector(".resumen-pedidos");
       const totalPedidosTexto = resumen?.textContent?.match(/(\d+)/);
       const totalPedidos = totalPedidosTexto ? parseInt(totalPedidosTexto[1], 10) : 0;
 
-      estructura[año][mes].push({ header: grupo, pedidos, totalPedidos, fechaId });
+      if (!estructura[año]) estructura[año] = {};
+      if (!estructura[año][mesId]) estructura[año][mesId] = [];
+      estructura[año][mesId].push({ header: grupo, pedidos, totalPedidos, fechaId });
     });
 
     container.innerHTML = "<h2 class='pb-2 border-bottom'>Historial agrupado</h2>";
-
-    const mesesOrden = [
-      "enero", "febrero", "marzo", "abril", "mayo", "junio",
-      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
-    ];
 
     Object.keys(estructura).sort((a, b) => b - a).forEach(año => {
       const añoDiv = document.createElement("div");
       añoDiv.innerHTML = `<h3 class="mt-4">${año}</h3>`;
       container.appendChild(añoDiv);
 
-      const meses = estructura[año];
-      Object.keys(meses)
-        .sort((a, b) => mesesOrden.indexOf(b.toLowerCase()) - mesesOrden.indexOf(a.toLowerCase()))
-        .forEach(mes => {
-          const dias = meses[mes];
-          const totalMes = dias.reduce((acc, d) => acc + d.totalPedidos, 0);
+      // mesId tiene forma "mes-YYYY-MM", así que ordenar el string
+      // alfabéticamente al revés ya deja los meses más recientes primero.
+      const mesesIds = Object.keys(estructura[año]).sort((a, b) => b.localeCompare(a));
 
-          const mesId = `mes-${año}-${("0" + (mesesOrden.indexOf(mes.toLowerCase()) + 1)).slice(-2)}`;
+      mesesIds.forEach(mesId => {
+        const dias = estructura[año][mesId];
+        const totalMes = dias.reduce((acc, d) => acc + d.totalPedidos, 0);
 
-          const mesDiv = document.createElement("div");
-          mesDiv.innerHTML = `
-            <h4 class="mt-3 ms-2 d-flex justify-content-between align-items-center">
-              <button type="button" class="fecha-btn" onclick="toggleMes('${mesId}')">
-                📂 ${mes} ${año}
-              </button>
-              <span class="badge bg-success fs-6">${totalMes} pedido${totalMes === 1 ? '' : 's'} en total</span>
-            </h4>
-            <div id="${mesId}" style="display: none;"></div>`;
-          container.appendChild(mesDiv);
+        // Nombre del mes calculado desde la fecha real (no desde texto ya
+        // renderizado), fijo en es-CO para que coincida siempre con el
+        // resto de la app, sin importar el idioma del navegador.
+        const mm = mesId.split('-')[2];
+        const fechaRef = new Date(Number(año), Number(mm) - 1, 1);
+        const nombreMes = fechaRef.toLocaleDateString('es-CO', { month: 'long' });
 
-          const contenedorMes = mesDiv.querySelector(`#${mesId}`);
-          dias.forEach(({ header, pedidos }) => {
-            contenedorMes.appendChild(header);
-            contenedorMes.appendChild(pedidos);
-          });
+        const mesDiv = document.createElement("div");
+        mesDiv.innerHTML = `
+          <h4 class="mt-3 ms-2 d-flex justify-content-between align-items-center">
+            <button type="button" class="fecha-btn" onclick="toggleMes('${mesId}')">
+              📂 ${nombreMes} ${año}
+            </button>
+            <span class="badge bg-success fs-6">${totalMes} pedido${totalMes === 1 ? '' : 's'} en total</span>
+          </h4>
+          <div id="${mesId}" style="display: none;"></div>`;
+        container.appendChild(mesDiv);
+
+        const contenedorMes = mesDiv.querySelector(`#${mesId}`);
+        dias.forEach(({ header, pedidos }) => {
+          contenedorMes.appendChild(header);
+          contenedorMes.appendChild(pedidos);
         });
+      });
     });
   };
 

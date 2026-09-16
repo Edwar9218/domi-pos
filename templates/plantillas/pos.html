@@ -129,6 +129,17 @@
   #estadoConexion.en-linea {
     background: #16a34a;
   }
+  /* 🟢 Pulso de "escribiendo": un anillo verde que late alrededor del
+     punto de conexión mientras el servidor va confirmando, en vivo, que
+     está recibiendo lo que se está tecleando (no solo que el socket
+     "parece" abierto). Se agrega/quita la clase por JS. */
+  #estadoConexion.escribiendo {
+    animation: pulso-escribiendo 0.9s ease-in-out infinite;
+  }
+  @keyframes pulso-escribiendo {
+    0%, 100% { box-shadow: 0 2px 10px rgba(0,0,0,0.3), 0 0 0 0 rgba(22,163,74,0.55); }
+    50% { box-shadow: 0 2px 10px rgba(0,0,0,0.3), 0 0 0 9px rgba(22,163,74,0); }
+  }
   .fab-spinner {
     width: 18px;
     height: 18px;
@@ -379,7 +390,11 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 </script>
-<!-- ✅ Consulta si el ticket ya se imprimió, sin tener que preguntarle a cocina -->
+<!-- ✅ Aviso de que el pedido se mandó a imprimir. Antes acá se consultaba
+     cada 2 segundos (hasta por 60s) si el ticket ya había salido de la
+     impresora físicamente -- se quitó porque hacía más lento el sistema.
+     Ahora solo se avisa que se mandó a imprimir; si de verdad falla la
+     impresora, cocina lo nota igual porque el pedido no llega en papel. -->
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const params = new URLSearchParams(window.location.search);
@@ -387,44 +402,14 @@ document.addEventListener("DOMContentLoaded", function () {
   if (!pedidoId) return;
 
   const banner = document.getElementById("estadoImpresion");
-  const mostrarBanner = (texto, color, fondo) => {
+  if (banner) {
     banner.style.display = "block";
-    banner.style.color = color;
-    banner.style.backgroundColor = fondo;
-    banner.textContent = texto;
-  };
+    banner.style.color = "#0f5132";
+    banner.style.backgroundColor = "#d1e7dd";
+    banner.textContent = "✅ Pedido enviado a imprimir.";
+  }
 
-  mostrarBanner("🖨️ Imprimiendo pedido, espera un momento...", "#664d03", "#fff3cd");
-
-  let intentos = 0;
-  const maxIntentos = 30; // 30 x 2s = 1 minuto máximo esperando
-
-  const consultar = () => {
-    fetch(`/estado-impresion/${pedidoId}/`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.impreso === true) {
-          mostrarBanner("✅ Se envió a la impresora sin errores.", "#0f5132", "#d1e7dd");
-        } else if (data.impreso === false) {
-          mostrarBanner("❌ La impresora reportó un error (sin papel, apagada o atascada).", "#842029", "#f8d7da");
-        } else {
-          intentos++;
-          if (intentos >= maxIntentos) {
-            mostrarBanner("⚠️ No se pudo confirmar si imprimió. Verifica.", "#664d03", "#fff3cd");
-            return;
-          }
-          setTimeout(consultar, 2000);
-        }
-      })
-      .catch(() => {
-        intentos++;
-        if (intentos < maxIntentos) setTimeout(consultar, 2000);
-      });
-  };
-
-  consultar();
-
-  // Limpia el "?check=" de la URL para que un refresh no vuelva a consultar
+  // Limpia el "?check=" de la URL para que un refresh no lo vuelva a mostrar
   const urlLimpia = window.location.pathname;
   window.history.replaceState({}, document.title, urlLimpia);
 });
@@ -483,6 +468,19 @@ document.addEventListener("DOMContentLoaded", function () {
       .catch(() => {});
   };
 
+  // 🛡️ Si llegan dos mensajes del websocket casi al mismo tiempo (por
+  // ejemplo: se guarda el pedido y, segundos después, se guarda otra vez
+  // al confirmar la impresión), esto evita disparar dos fetch() seguidos
+  // — solo se hace el último, una vez las cosas se calman un momento.
+  const debounce = (fn, esperaMs) => {
+    let temporizador = null;
+    return (...args) => {
+      clearTimeout(temporizador);
+      temporizador = setTimeout(() => fn(...args), esperaMs);
+    };
+  };
+  const cargarListaDebounced = debounce(cargarLista, 200);
+
   cargarLista();
   recalcularTiempos();
   actualizarBadge();
@@ -515,12 +513,75 @@ document.addEventListener("DOMContentLoaded", function () {
     if (fabCheck) fabCheck.style.display = 'none';
   };
 
+  // 🟢 "Escribiendo": cada vez que la persona teclea el pedido, se manda
+  // un mensaje liviano por el socket. Si el servidor lo recibe y contesta
+  // (ida y vuelta real, no solo "el socket dice que está abierto"), el
+  // punto de conexión pulsa en verde un momento — la misma idea que el
+  // "escribiendo..." de WhatsApp, pero aquí sirve para comprobar que el
+  // servidor SÍ está recibiendo lo que se está escribiendo en este
+  // instante, no solo que la conexión quedó abierta hace rato.
+  let ultimoAvisoEscribiendo = 0;
+  let apagarPulsoTimeout = null;
+  const avisarEscribiendo = () => {
+    const ahora = Date.now();
+    if (ahora - ultimoAvisoEscribiendo < 400) return; // no saturar el socket tecleo a tecleo
+    ultimoAvisoEscribiendo = ahora;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ tipo: 'escribiendo' }));
+    }
+  };
+  const mostrarPulsoEscribiendo = () => {
+    if (!indicadorConexion) return;
+    indicadorConexion.classList.add('escribiendo');
+    clearTimeout(apagarPulsoTimeout);
+    // Si no llega otra confirmación pronto, se apaga solo — igual que el
+    // "escribiendo..." de WhatsApp desaparece cuando la persona deja de teclear.
+    apagarPulsoTimeout = setTimeout(() => {
+      indicadorConexion.classList.remove('escribiendo');
+    }, 1000);
+  };
+
+  // 🔄 Si el servidor se reinició (deploy, se cayó y lo volvieron a
+  // prender, reinicio manual) mientras esta pantalla seguía abierta, el
+  // ID que manda por WebSocket al conectar ya no coincide con el que se
+  // guardó al cargar la página. En ese caso, recargamos solos para traer
+  // el HTML/JS más reciente — es seguro porque el texto del pedido que
+  // se esté escribiendo ya se guarda en vivo en localStorage (ver más
+  // abajo, "texto_pos_temporal") y se restaura automáticamente al volver
+  // a cargar la página.
+  const manejarPosibleReinicioServidor = (data) => {
+    if (data.tipo !== 'servidor_id') return false;
+    if (!window.SERVER_INSTANCE_ID || data.id === window.SERVER_INSTANCE_ID) {
+      return true; // mismo servidor de siempre, no hay nada que hacer
+    }
+    // Pequeño retraso al azar para no golpear al servidor con todas las
+    // pantallas recargando exactamente al mismo tiempo.
+    const espera = 300 + Math.random() * 1200;
+    setTimeout(() => window.location.reload(), espera);
+    return true;
+  };
+
   const conectarSocket = () => {
     socket = new ReconnectingWebSocket(wsUrl);
     socket.onopen = () => { marcarConectado(); cargarLista(); };
     socket.onclose = marcarDesconectado;
     socket.onerror = marcarDesconectado;
-    socket.onmessage = cargarLista;
+    socket.onmessage = (event) => {
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch (e) {
+        return;
+      }
+      if (manejarPosibleReinicioServidor(data)) return;
+      if (data.tipo === 'escribiendo_ack') {
+        mostrarPulsoEscribiendo();
+        return;
+      }
+      // Cualquier otro mensaje (ej. 'actualizar_fecha') significa que
+      // cambió algo en los pedidos → refrescar la lista de domicilios.
+      cargarListaDebounced();
+    };
   };
 
   conectarSocket();
@@ -544,9 +605,11 @@ document.addEventListener("DOMContentLoaded", function () {
   if (textareaPedido) {
     let yaVerificoAlEscribir = false;
     textareaPedido.addEventListener('input', () => {
-      if (yaVerificoAlEscribir) return;
-      yaVerificoAlEscribir = true;
-      window.forzarReconexion();
+      if (!yaVerificoAlEscribir) {
+        yaVerificoAlEscribir = true;
+        window.forzarReconexion();
+      }
+      avisarEscribiendo();
     });
   }
 

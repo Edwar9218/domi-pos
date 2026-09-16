@@ -15,6 +15,13 @@
     <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}" />
     {% block head %}{% endblock head %}
     {% block estra_css %}{% endblock estra_css %}
+    <script>
+      // Con qué proceso/versión del servidor se generó esta página. Cada
+      // pantalla lo compara contra el que le llega por WebSocket al
+      // conectar/reconectar para saber si el servidor se reinició desde
+      // que se cargó (ver pos/server_instance.py y pos/consumers.py).
+      window.SERVER_INSTANCE_ID = "{{ server_instance_id }}";
+    </script>
   </head>
   <body cz-shortcut-listen="true">
     <!-- Navbar -->

@@ -9,32 +9,27 @@ from django.template.loader import render_to_string
 # Modelos y utilidades locales
 from .models import Producto
 from .util import imprimir_texto
+from .background import background_executor
 
 # Fechas y zona horaria
 from datetime import datetime, date
 import pytz
 
-# Para imprimir sin bloquear la respuesta HTTP
-import threading
-
 
 def _imprimir_en_segundo_plano(pedido_id, texto_impresion):
     """
-    Corre en un hilo aparte para que la petición del celular no se quede
-    esperando a la impresora. imprimir_texto() ahora consulta la cola de
-    Windows para saber si el ticket realmente salió (no solo si el comando
-    se envió sin errores). Guarda el resultado con .save() normal para
-    que dispare la señal post_save y así todas las pantallas conectadas
-    (cocina, celular) se enteren del cambio en vivo.
+    Corre en segundo plano (pool acotado) para que la petición del celular
+    no se quede esperando a la impresora. Ya no consulta la cola de
+    Windows para confirmar si el ticket salió físicamente -- eso se quitó
+    por ser lento. Guarda el resultado con .save() normal para que dispare
+    la señal post_save y así todas las pantallas conectadas (cocina,
+    celular) se enteren del cambio en vivo.
     """
     try:
-        exito = imprimir_texto(texto_impresion)
+        imprimir_texto(texto_impresion)
         producto = Producto.objects.get(pk=pedido_id)
-        if exito:
-            producto.impreso = True
-            producto.despachado = True
-        else:
-            producto.impreso = False
+        producto.impreso = True
+        producto.despachado = True
         producto.save()
     except Exception as e:
         print(f"Error al imprimir: {e}")
@@ -84,13 +79,12 @@ class TxtCreateView(CreateView):
             form.instance.save()
             pedido_id = form.instance.pk
 
-            # La impresión real se hace en un hilo aparte, así la petición
+            # La impresión real se hace en segundo plano (pool acotado de
+            # hilos, compartido con las notificaciones WS), así la petición
             # del celular no se queda "cargando" esperando a la impresora.
-            threading.Thread(
-                target=_imprimir_en_segundo_plano,
-                args=(pedido_id, texto_impresion),
-                daemon=True,
-            ).start()
+            background_executor.submit(
+                _imprimir_en_segundo_plano, pedido_id, texto_impresion
+            )
 
             return redirect(f"{reverse('producto_create')}?check={pedido_id}")
         return super().form_valid(form)
@@ -180,17 +174,6 @@ def pedidos_por_fecha(request):
         "today_date": fecha_str,
     })
     return JsonResponse({"html": html})
-
-
-def estado_impresion(request, pk):
-    """
-    El celular consulta este endpoint cada pocos segundos después de dar
-    'Imprimir' para saber si ya salió el ticket o si falló, sin tener que
-    preguntarle a cocina.
-    impreso: null = en proceso, true = impreso ok, false = falló
-    """
-    producto = get_object_or_404(Producto, pk=pk)
-    return JsonResponse({"impreso": producto.impreso})
 
 
 def pedidos_esperando_domiciliario_html():

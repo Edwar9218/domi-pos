@@ -135,16 +135,51 @@
       .catch(() => {});
   };
 
+  // 🛡️ Si llegan dos mensajes del websocket casi al mismo tiempo, evita
+  // disparar dos fetch() seguidos — solo se hace el último.
+  const debounce = (fn, esperaMs) => {
+    let temporizador = null;
+    return (...args) => {
+      clearTimeout(temporizador);
+      temporizador = setTimeout(() => fn(...args), esperaMs);
+    };
+  };
+  const cargarListaDebounced = debounce(cargarLista, 200);
+
   recalcularTiempos();
   setInterval(recalcularTiempos, 60000);
   setInterval(cargarLista, 30000);
+
+  // 🔄 Igual que en las otras pantallas: si el ID que manda el servidor al
+  // conectar no coincide con el que se guardó al cargar la página, es
+  // porque el servidor se reinició mientras tanto — se recarga sola para
+  // traer el HTML/JS más reciente. No hay ningún formulario/borrador que
+  // proteger en esta pantalla, así que se puede recargar directo.
+  const manejarPosibleReinicioServidor = (data) => {
+    if (data.tipo !== 'servidor_id') return false;
+    if (!window.SERVER_INSTANCE_ID || data.id === window.SERVER_INSTANCE_ID) {
+      return true;
+    }
+    const espera = 300 + Math.random() * 1200;
+    setTimeout(() => window.location.reload(), espera);
+    return true;
+  };
 
   const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/productos/`;
   let socket = new ReconnectingWebSocket(wsUrl);
   socket.onopen = () => { marcarConectado(); cargarLista(); };
   socket.onclose = marcarDesconectado;
   socket.onerror = marcarDesconectado;
-  socket.onmessage = cargarLista;
+  socket.onmessage = (event) => {
+    let data;
+    try {
+      data = JSON.parse(event.data);
+    } catch (e) {
+      return;
+    }
+    if (manejarPosibleReinicioServidor(data)) return;
+    cargarListaDebounced();
+  };
 })();
 </script>
 {% endblock extra_js %}
