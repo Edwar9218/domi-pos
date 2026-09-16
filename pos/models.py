@@ -1,4 +1,5 @@
 from django.db import models
+from urllib.parse import quote
 
 # Create your models here.
 class Producto(models.Model):
@@ -17,3 +18,34 @@ class Producto(models.Model):
 
     def __str__(self):
         return self.txt
+
+
+class Cliente(models.Model):
+    """
+    Direcciones de clientes guardadas para no tener que volver a
+    preguntarlas cada vez que llaman. El Plus Code es lo que se copia
+    directo de Google Maps (botón "Compartir" -> el código que aparece,
+    ej: "7WCV+2Q Cali, Colombia") -- con eso se arma un link que abre
+    la ubicación exacta en Maps, sin necesitar ninguna llave de API.
+    """
+    nombre = models.CharField(max_length=150)
+    telefono = models.CharField(max_length=30, blank=True)
+    direccion = models.TextField()
+    plus_code = models.CharField(
+        max_length=150, blank=True,
+        help_text="Pega el Plus Code de Google Maps, ej: 7WCV+2Q Cali, Colombia",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+    def maps_url(self):
+        """None si no hay Plus Code guardado (el template no muestra el
+        botón de Maps en ese caso)."""
+        if not self.plus_code:
+            return None
+        return f"https://www.google.com/maps/search/?api=1&query={quote(self.plus_code)}"

@@ -8,10 +8,14 @@ from django.template.loader import render_to_string
 from django.core.cache import cache
 
 # Modelos y utilidades locales
-from .models import Producto
+from .models import Producto, Cliente
+from .forms import ClienteForm
 from .util import imprimir_texto
 from .background import background_executor
 from .cache_keys import PEDIDOS_ESPERANDO_DOMICILIARIO
+
+# Búsquedas
+from django.db.models import Q
 
 # Fechas y zona horaria
 from datetime import datetime, date, timedelta
@@ -280,3 +284,49 @@ class ConfirmarRecogidaView(View):
             return JsonResponse({'ok': True})
 
         return redirect(reverse('confirmar_recogida'))
+
+
+# 📍 Direcciones guardadas de clientes -- para no tener que volver a
+# preguntar la dirección cada vez que llaman a pedir.
+
+class ClienteListView(ListView):
+    model = Cliente
+    template_name = "plantillas/clientes_listar.html"
+    context_object_name = "clientes"
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(
+                Q(nombre__icontains=q)
+                | Q(telefono__icontains=q)
+                | Q(direccion__icontains=q)
+            )
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["q"] = self.request.GET.get("q", "")
+        return context
+
+
+class ClienteCreateView(CreateView):
+    model = Cliente
+    form_class = ClienteForm
+    template_name = "plantillas/cliente_form.html"
+    success_url = reverse_lazy("clientes_listar")
+
+
+class ClienteUpdateView(UpdateView):
+    model = Cliente
+    form_class = ClienteForm
+    template_name = "plantillas/cliente_form.html"
+    success_url = reverse_lazy("clientes_listar")
+
+
+class ClienteDeleteView(View):
+    def post(self, request, pk):
+        cliente = get_object_or_404(Cliente, pk=pk)
+        cliente.delete()
+        return redirect(reverse("clientes_listar"))

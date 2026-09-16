@@ -39,6 +39,14 @@
             🛵 Confirmar recogida
           </a>
         </li>
+        <li class="nav-item">
+          <a
+            href="{% url 'clientes_listar' %}"
+            class="nav-link {% if request.resolver_match.url_name == 'clientes_listar' or request.resolver_match.url_name == 'cliente_crear' or request.resolver_match.url_name == 'cliente_editar' %}active{% endif %}"
+          >
+            📍 Direcciones
+          </a>
+        </li>
       </ul>
     </div>
   </div>

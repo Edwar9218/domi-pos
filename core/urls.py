@@ -4,6 +4,7 @@ from pos.views import (
     TxtCreateView, TXTListView, PedidoUpdateView, DespacharProductoView,
     pedidos_por_fecha, pedidos_esperando_domiciliario,
     ConfirmarRecogidaListView, ConfirmarRecogidaView, EliminarPedidoView,
+    ClienteListView, ClienteCreateView, ClienteUpdateView, ClienteDeleteView,
 )
 
 urlpatterns = [
@@ -18,4 +19,9 @@ urlpatterns = [
     path('confirmar-recogida/', ConfirmarRecogidaListView.as_view(), name='confirmar_recogida'),
     path('confirmar-recogida/<int:pk>/', ConfirmarRecogidaView.as_view(), name='confirmar_recogida_pedido'),
 
+    # 📍 Direcciones guardadas de clientes
+    path('clientes/', ClienteListView.as_view(), name='clientes_listar'),
+    path('clientes/nuevo/', ClienteCreateView.as_view(), name='cliente_crear'),
+    path('clientes/<int:pk>/editar/', ClienteUpdateView.as_view(), name='cliente_editar'),
+    path('clientes/<int:pk>/eliminar/', ClienteDeleteView.as_view(), name='cliente_eliminar'),
 ]
