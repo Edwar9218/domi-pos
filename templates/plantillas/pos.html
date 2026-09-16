@@ -22,8 +22,19 @@
   }
   .container_post {
     width: 100%;
-    max-width: 620px;
+    max-width: 700px;
     padding: 10px;
+  }
+
+  /* 🪨 Panel que envuelve el formulario -- mismo lenguaje neumórfico que
+     el resto de la app (tarjetas elevadas, sombra dual), para que deje
+     de verse como un elemento suelto flotando sobre el fondo. */
+  .panel-registrar {
+    background: var(--neu-bg, #E7ECF3);
+    border-radius: 1.25rem;
+    box-shadow: 9px 9px 18px var(--neu-dark, rgba(163,177,198,.55)), -9px -9px 18px var(--neu-light, rgba(255,255,255,.85));
+    padding: 24px 20px;
+    margin-bottom: 10px;
   }
 
   .center-form {
@@ -32,13 +43,22 @@
     align-items: center;
   }
   textarea {
-    width: 55%;
+    /* Ancho fijo en píxeles (no %): así, aunque el panel que lo rodea
+       cambie de tamaño, el textarea sigue midiendo exactamente lo mismo
+       -- calibrado para que el ancho en caracteres coincida con el
+       papel de la impresora térmica de 80mm. 330px = lo que medía antes
+       (55% de los ~600px que tenía el contenedor original). */
+    width: 330px;
+    max-width: 100%;
     height: 300px;
     font-family: "Courier New", monospace;
     font-size: 16px;
     resize: vertical;
     padding: 10px;
-    border: 1px solid #ccc;
+    border: none;
+    border-radius: 1rem;
+    box-shadow: inset 4px 4px 8px var(--neu-dark, rgba(163,177,198,.5)), inset -4px -4px 8px var(--neu-light, rgba(255,255,255,.8));
+    background: #fff;
   }
 
   .btn {
@@ -72,26 +92,40 @@
       width: 100%;
       font-size: 16px;
     }
+    /* 📱 El panel nuevo (.panel-registrar) tenía el mismo padding que en
+       escritorio (24px 20px) -- en un teléfono angosto eso se come
+       espacio de sobra que hace falta para el textarea y los botones. */
+    .panel-registrar {
+      padding: 16px 12px;
+    }
+    /* 📱 El body + .container_post sumaban 30px de margen a cada lado
+       (20px del body + 10px del container), más que los 20px que usa
+       "Confirmar recogida" -- por eso las tarjetas de domicilios se
+       veían más angostas ahí que en esa pantalla. Se quita el padding
+       del container en móvil para que quede igual de ancho (20px, solo
+       el del body) en las dos pantallas. */
+    .container_post {
+      padding: 0;
+    }
   }
 
   .panel-esperando-domi {
-    max-width: 620px;
+    max-width: 700px;
     margin: 0 auto;
   }
   .alerta-domi {
-    background: white;
+    background: var(--neu-bg, #E7ECF3);
     border-left: 5px solid #16a34a;
-    border-radius: 6px;
+    border-radius: 1rem;
     padding: 10px 14px;
     margin-bottom: 10px;
-    box-shadow: 0 0 6px rgba(0,0,0,0.08);
+    box-shadow: 6px 6px 12px var(--neu-dark, rgba(163,177,198,.5)), -6px -6px 12px var(--neu-light, rgba(255,255,255,.85));
   }
   .alerta-domi.demora-media {
     border-left-color: #d97706;
   }
   .alerta-domi.demora-alta {
     border-left-color: #dc2626;
-    background: #fff5f5;
   }
   .alerta-domi-tiempo {
     font-weight: bold;
@@ -167,42 +201,43 @@
   }
 </style>
 {% endblock estra_css %} {% block content %}
-<div class="container_post px-4 py-5 mt-5">
-  <!-- Banner de estado de impresión: aparece solo si venimos de dar clic en "Imprimir" -->
-  <div id="estadoImpresion" style="display:none; text-align:center; padding:12px; border-radius:8px; margin-bottom:15px; font-weight:bold;"></div>
-  <h2>Texto POS</h2>
-  <form method="post" class="center-form">
-    {% csrf_token %}
-    <textarea name="txt">{{ form.txt.value|default_if_none:'' }}</textarea>
-  <div class="btns" style="display: flex; gap: 10px;">
-  <button
-    type="button"
-    id="btnPegar"
-    class="btn btn-warning"
-  >
-    Pegar
-  </button>
-<!--<button
-  type="submit"
-  name="accion"
-  value="registrar"
-  class="btn btn-primary"
-  id="btnRegistrar"
->
-  Registrar pedido
-</button> -->
-  <button
+<div class="container_post py-5 mt-5">
+  <div class="panel-registrar">
+    <!-- Banner de estado de impresión: aparece solo si venimos de dar clic en "Imprimir" -->
+    <div id="estadoImpresion" style="display:none; text-align:center; padding:12px; border-radius:8px; margin-bottom:15px; font-weight:bold;"></div>
+    <form method="post" class="center-form">
+      {% csrf_token %}
+      <textarea name="txt">{{ form.txt.value|default_if_none:'' }}</textarea>
+    <div class="btns" style="display: flex; gap: 10px; justify-content: center;">
+    <button
+      type="button"
+      id="btnPegar"
+      class="btn btn-warning"
+    >
+      Pegar
+    </button>
+  <!--<button
     type="submit"
     name="accion"
-    value="imprimir"
-    class="btn btn-success"
-    id="btnImpre"
+    value="registrar"
+    class="btn btn-primary"
+    id="btnRegistrar"
   >
-    Imprimir texto
-  </button>
-  
-</div>
-  </form>
+    Registrar pedido
+  </button> -->
+    <button
+      type="submit"
+      name="accion"
+      value="imprimir"
+      class="btn btn-success"
+      id="btnImpre"
+    >
+      Imprimir texto
+    </button>
+
+  </div>
+    </form>
+  </div>
 
   <!-- 🛵 Domicilios que ya están listos pero el mensajero aún no ha recogido -->
   <div class="panel-esperando-domi mt-4">
@@ -210,6 +245,7 @@
       <span>🛵 Domicilios esperando mensajero</span>
       <span id="badgeEsperandoDomi" class="badge bg-secondary">0</span>
     </h4>
+
     <div id="listaEsperandoDomi">
       <p class="text-muted mb-0">Cargando...</p>
     </div>

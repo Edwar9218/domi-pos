@@ -7,14 +7,239 @@
     <title>{% block title %} {% endblock %}</title>
     <meta name="description" content="" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="" />
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@docsearch/css@3"
-    />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}" />
     {% block head %}{% endblock head %}
     {% block estra_css %}{% endblock estra_css %}
+    <style>
+      /* 🎨 Paleta de marca: tomada de la etiqueta real del negocio
+         (Granizados De Tatis) -- fondo azul turquesa con el texto en
+         rojo/coral. Reemplaza el verde lima que traía el tema de
+         Bootstrap por defecto, que no tenía nada que ver con la marca.
+         El verde SÍ se mantiene donde significa algo (el punto de
+         "conectado" y la escala de colores de urgencia de los
+         domicilios) -- ese verde es una señal de estado universal, no
+         parte de la marca, así que no se tocó. */
+      :root, [data-bs-theme=light] {
+        --bs-primary: #1B7FB8;
+        --bs-primary-rgb: 27, 127, 184;
+        --bs-primary-text-emphasis: #0d4d70;
+        --bs-primary-bg-subtle: #dcedf7;
+        --bs-primary-border-subtle: #a9d4ec;
+      }
+      /* .btn-primary trae su color en hex fijo (no usa las variables de
+         arriba), así que se sobreescribe aparte. El borde negro y la
+         sombra dura los sigue poniendo la regla general .btn del tema.
+
+         Mismo criterio para success/danger/warning: en vez de que el
+         botón sea un bloque sólido de color, el fondo se queda neutro
+         (igual que el resto de las tarjetas) y el color vive en la
+         letra -- más minimalista, como en el ejemplo del dashboard. */
+      .btn-primary, .btn-success, .btn-danger, .btn-warning {
+        --bs-btn-hover-color: var(--bs-btn-color);
+        --bs-btn-active-color: var(--bs-btn-color);
+        --bs-btn-disabled-color: var(--bs-btn-color);
+        --bs-btn-bg: var(--neu-bg, #E7ECF3);
+        --bs-btn-hover-bg: var(--neu-bg, #E7ECF3);
+        --bs-btn-active-bg: var(--neu-bg, #E7ECF3);
+        --bs-btn-disabled-bg: var(--neu-bg, #E7ECF3);
+        font-weight: 700;
+      }
+      .btn-primary { --bs-btn-color: #1B7FB8; }
+      .btn-success { --bs-btn-color: #15803d; }
+      .btn-danger  { --bs-btn-color: #dc2626; }
+      .btn-warning { --bs-btn-color: #b45309; }
+
+      /* 🎨 Tipografía compartida: los títulos y el navbar usan Space
+         Grotesk (geométrica, con personalidad, hace juego con el estilo
+         de bordes negros/sombras duras que ya tenía el bootstrap.min.css
+         de este proyecto). El cuerpo del texto se queda en la tipografía
+         del sistema -- rápida, sin depender de la red, y ya es legible.
+         Si la fuente no carga (sin internet), todo cae de vuelta a la
+         tipografía del sistema sin romper nada. */
+      h1, h2, h3, h4, .navbar, .fecha-btn {
+        font-family: 'Space Grotesk', var(--bs-font-sans-serif);
+      }
+
+      /* 📏 Escala tipográfica única para toda la app: el mismo tipo de
+         elemento (título de pantalla, subtítulo, texto de pedido, texto
+         chico) mide igual en "Registrar pedido", "Despachados" y
+         "Confirmar recogida" -- antes "Texto POS" (18px) se veía como
+         la mitad de grande que "Historial de pedidos" o "Confirmar
+         recogida" (~28px), que es justo el salto que se sentía raro al
+         cambiar de pantalla. Con !important porque cada plantilla traía
+         su propio font-size suelto que si no, gana por venir después en
+         el HTML. */
+      h2, .h2 { font-size: 1.45rem !important; font-weight: 700 !important; }
+      h3, .h3 { font-size: 1.15rem !important; font-weight: 700 !important; }
+      h4, .h4 { font-size: 1rem !important; }
+      p, .lead, .alerta-domi-texto, .pedido-recogida-texto, #pedidoTexto {
+        font-size: 0.95rem !important;
+      }
+      small, .small, .text-muted, .alerta-domi-tiempo, .pedido-recogida-tiempo {
+        font-size: 0.82rem !important;
+      }
+
+      /* 📍 Navbar: fondo neutro (igual que el resto de la app), el color
+         de marca vive en el TEXTO de los links, no como relleno sólido
+         -- así el navbar se ve tan "limpio" como el resto de las
+         tarjetas neumórficas, en vez de ser un bloque de color plano. */
+      .navbar .nav-link,
+      .navbar .navbar-brand-link {
+        color: #4b5563 !important;
+        font-weight: 600;
+        border-radius: 0.85rem;
+        padding: 0.5rem 0.9rem;
+        transition: color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .navbar .nav-link:hover,
+      .navbar .navbar-brand-link:hover {
+        color: #1B7FB8 !important;
+        box-shadow: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 5px var(--neu-light);
+      }
+      .navbar .nav-link.active,
+      .navbar .navbar-brand-link.active {
+        color: #E0293D !important;
+        box-shadow: inset 3px 3px 6px var(--neu-dark), inset -3px -3px 6px var(--neu-light);
+      }
+
+      /* ============================================================
+         🪨 NEUMORFISMO: el fondo y las tarjetas usan el MISMO color
+         base (--neu-bg) -- lo que hace que una tarjeta "sobresalga" no
+         es un color distinto, es un par de sombras: una clara arriba-
+         izquierda (simula luz pegando) y una oscura abajo-derecha
+         (simula la sombra que proyecta). Los elementos "hundidos"
+         (inputs, textareas) usan el mismo par de sombras pero hacia
+         adentro (inset), como si estuvieran presionados en la
+         superficie.
+
+         Importante: esto SOLO cambia fondo/sombra/borde/radio -- ningún
+         padding, ancho, alto ni margen. El textarea y los botones de
+         "Registrar pedido" no cambian de tamaño, solo de apariencia.
+         ============================================================ */
+      :root, [data-bs-theme=light] {
+        --neu-bg: #E7ECF3;
+        --neu-dark: rgba(163, 177, 198, .55);
+        --neu-light: rgba(255, 255, 255, .85);
+        --bs-border-color: #E5E7EB;
+        --bs-border-width: 1px;
+        --bs-border-radius: 1rem;
+        --bs-border-radius-lg: 1.25rem;
+        --bs-border-radius-sm: 0.7rem;
+      }
+      body { background: var(--neu-bg) !important; }
+
+      /* Tarjetas "elevadas": mismo color que el fondo, se notan por la
+         sombra dual, no por un color distinto. */
+      .modal-content, .card, #loader {
+        background: var(--neu-bg) !important;
+        border: none !important;
+        border-radius: 1.25rem !important;
+        box-shadow: 9px 9px 18px var(--neu-dark), -9px -9px 18px var(--neu-light) !important;
+      }
+
+      /* Botones: "elevados" en reposo, se "hunden" al presionarlos --
+         el efecto táctil de peso/resistencia del neumorfismo. */
+      .btn {
+        border-color: transparent !important;
+        box-shadow: 5px 5px 10px rgba(163,177,198,.4), -5px -5px 10px rgba(255,255,255,.7) !important;
+        transform: none !important;
+        border-radius: 1rem !important;
+        transition: box-shadow .15s ease, filter .15s ease !important;
+      }
+      .btn:hover {
+        filter: brightness(1.03);
+        box-shadow: 6px 6px 14px rgba(163,177,198,.45), -6px -6px 14px rgba(255,255,255,.75) !important;
+      }
+      .btn:active,
+      .btn.active,
+      .btn.show,
+      .btn:first-child:active,
+      :not(.btn-check)+.btn:active {
+        box-shadow: inset 3px 3px 6px rgba(163,177,198,.5), inset -3px -3px 6px rgba(255,255,255,.6) !important;
+        filter: brightness(0.97);
+      }
+      .btn-outline-secondary {
+        background: var(--neu-bg) !important;
+        border-color: transparent !important;
+        color: #374151 !important;
+        box-shadow: inset 3px 3px 6px rgba(163,177,198,.35), inset -3px -3px 6px rgba(255,255,255,.6) !important;
+      }
+      .btn-outline-secondary:hover {
+        filter: brightness(0.98);
+      }
+
+      .alert {
+        border: none !important;
+        border-radius: 0.85rem !important;
+        box-shadow: 0 1px 2px rgba(16,24,40,.06) !important;
+      }
+      .dropdown-menu {
+        background: var(--neu-bg) !important;
+        border: none !important;
+        border-radius: 1.1rem !important;
+        box-shadow: 9px 9px 18px var(--neu-dark), -9px -9px 18px var(--neu-light) !important;
+      }
+
+      /* Inputs "hundidos": el par de sombras hacia adentro simula que
+         están presionados en la superficie, como el buscador del
+         ejemplo. */
+      .form-control, .form-select {
+        background: var(--neu-bg) !important;
+        border: none !important;
+        border-radius: 0.9rem !important;
+        box-shadow: inset 4px 4px 8px var(--neu-dark), inset -4px -4px 8px var(--neu-light) !important;
+      }
+      .form-control:focus, .form-select:focus {
+        box-shadow: inset 4px 4px 8px var(--neu-dark), inset -4px -4px 8px var(--neu-light), 0 0 0 3px rgba(27,127,184,.2) !important;
+      }
+      .badge {
+        border: none !important;
+        box-shadow: none !important;
+      }
+      .navbar,
+      .navbar.fixed-top,
+      .navbar.fixed-bottom,
+      .navbar[data-bs-theme] {
+        background: var(--neu-bg) !important;
+        border: none !important;
+        border-width: 0 !important;
+        border-top: 0 !important;
+        border-bottom: 0 !important;
+        box-shadow: 0 4px 14px rgba(16,24,40,.14) !important;
+      }
+      .navbar-toggler {
+        border: none !important;
+        box-shadow: 5px 5px 10px var(--neu-dark), -5px -5px 10px var(--neu-light) !important;
+        border-radius: 0.85rem !important;
+        padding: 0.45rem 0.6rem !important;
+      }
+      .navbar-toggler:focus {
+        box-shadow: 5px 5px 10px var(--neu-dark), -5px -5px 10px var(--neu-light) !important;
+      }
+      .navbar-toggler:active,
+      .navbar-toggler[aria-expanded="true"] {
+        box-shadow: inset 3px 3px 6px var(--neu-dark), inset -3px -3px 6px var(--neu-light) !important;
+      }
+      .navbar-toggler-icon {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='%234b5563' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+      }
+    </style>
+    <style>
+      /* Chequeos/radios (como "Recent"/"Old" del ejemplo): pastilla
+         hundida con el punto elevado, mismo lenguaje neumórfico. */
+      .form-check-input {
+        background: var(--neu-bg) !important;
+        border: none !important;
+        box-shadow: inset 2px 2px 4px var(--neu-dark), inset -2px -2px 4px var(--neu-light) !important;
+      }
+      .form-check-input:checked {
+        background-color: #1B7FB8 !important;
+        box-shadow: 2px 2px 5px var(--neu-dark) !important;
+      }
+    </style>
     <script>
       // Con qué proceso/versión del servidor se generó esta página. Cada
       // pantalla lo compara contra el que le llega por WebSocket al

@@ -1,13 +1,15 @@
 {% extends 'plantillas/base.html' %} {% block navbar %}
 <div
-  class="navbar navbar-expand-lg fixed-top bg-primary"
+  class="navbar navbar-expand-lg fixed-top"
   data-bs-theme="light"
   style=""
 >
   <div class="container">
-    <a class="nav-link" href="{% url 'producto_create' %}"
-            >Registrar pedido</a
-          >
+    <a
+      class="nav-link navbar-brand-link {% if request.resolver_match.url_name == 'producto_create' %}active{% endif %}"
+      href="{% url 'producto_create' %}"
+      >Registrar pedido</a
+    >
     <button
       class="navbar-toggler collapsed"
       type="button"
@@ -24,7 +26,7 @@
         <li class="nav-item">
           <a
             href="/listar/?estado=despachado"
-            class="nav-link {% if estado_actual == 'despachado' %}active{% endif %}"
+            class="nav-link {% if request.resolver_match.url_name == 'producto_listar' %}active{% endif %}"
           >
             Despachados
           </a>
@@ -32,7 +34,7 @@
         <li class="nav-item">
           <a
             href="{% url 'confirmar_recogida' %}"
-            class="nav-link"
+            class="nav-link {% if request.resolver_match.url_name == 'confirmar_recogida' or request.resolver_match.url_name == 'confirmar_recogida_pedido' %}active{% endif %}"
           >
             🛵 Confirmar recogida
           </a>
