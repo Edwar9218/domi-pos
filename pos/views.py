@@ -12,7 +12,8 @@ from .util import imprimir_texto
 from .background import background_executor
 
 # Fechas y zona horaria
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from django.utils.dateparse import parse_date
 import pytz
 
 
@@ -90,6 +91,36 @@ class TxtCreateView(CreateView):
         return super().form_valid(form)
     
 
+def _resolver_rango_fechas(request, dias_por_defecto=60):
+    """
+    Lee ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD de la URL. Si la persona no
+    puso ninguno de los dos, usa por defecto los últimos ~2 meses
+    (60 días) en vez de traer TODO el historial -- antes esta pantalla
+    cargaba años completos de pedidos de una sola vez, lo que la hacía
+    cada vez más lenta con el tiempo.
+
+    Si solo puso uno de los dos extremos, se completa el otro con un
+    valor razonable. Si los puso al revés (desde > hasta), se invierten
+    solos para no romper la consulta.
+    """
+    hoy = date.today()
+    desde = parse_date(request.GET.get("desde") or "")
+    hasta = parse_date(request.GET.get("hasta") or "")
+
+    if desde is None and hasta is None:
+        hasta = hoy
+        desde = hoy - timedelta(days=dias_por_defecto)
+    else:
+        if hasta is None:
+            hasta = hoy
+        if desde is None:
+            desde = hasta - timedelta(days=dias_por_defecto)
+        if desde > hasta:
+            desde, hasta = hasta, desde
+
+    return desde, hasta
+
+
 class TXTListView(ListView):
     model = Producto
     template_name = "plantillas/posListar.html"
@@ -98,14 +129,22 @@ class TXTListView(ListView):
     def get_queryset(self):
         estado = self.request.GET.get("estado", "pendiente")
         if estado == "despachado":
-            return Producto.objects.filter(despachado=True).order_by(self.ordering)
+            queryset = Producto.objects.filter(despachado=True)
         else:
-            return Producto.objects.filter(despachado=False).order_by(self.ordering)
+            queryset = Producto.objects.filter(despachado=False)
+
+        desde, hasta = _resolver_rango_fechas(self.request)
+        queryset = queryset.filter(creado_en__date__gte=desde, creado_en__date__lte=hasta)
+
+        return queryset.order_by(self.ordering)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["estado_actual"] = self.request.GET.get("estado", "pendiente")
         context["today_date"] = date.today().strftime('%Y-%m-%d')  # 👈 esto es lo nuevo
+        desde, hasta = _resolver_rango_fechas(self.request)
+        context["filtro_desde"] = desde.isoformat()
+        context["filtro_hasta"] = hasta.isoformat()
         return context
 
 

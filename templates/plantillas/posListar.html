@@ -189,7 +189,34 @@
     {% endif %}
   </h2>
 
+  <!-- 📅 Filtro por rango de fechas. Por defecto el servidor solo trae
+       los últimos 2 meses (ver _resolver_rango_fechas en views.py); acá
+       se puede pedir cualquier otro rango con un calendario nativo. -->
+  <form method="get" class="row g-2 align-items-end mb-4" id="filtroFechasForm">
+    <input type="hidden" name="estado" value="{{ estado_actual }}">
+    <div class="col-6 col-md-3">
+      <label for="filtroDesde" class="form-label mb-1">Desde</label>
+      <input type="date" class="form-control" id="filtroDesde" name="desde"
+             value="{{ filtro_desde }}" max="{{ today_date }}">
+    </div>
+    <div class="col-6 col-md-3">
+      <label for="filtroHasta" class="form-label mb-1">Hasta</label>
+      <input type="date" class="form-control" id="filtroHasta" name="hasta"
+             value="{{ filtro_hasta }}" max="{{ today_date }}">
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-success">🔍 Filtrar</button>
+    </div>
+    <div class="col-auto">
+      <a href="?estado={{ estado_actual }}" class="btn btn-outline-secondary">Últimos 2 meses</a>
+    </div>
+    <div class="col-12">
+      <small class="text-muted">Mostrando pedidos del {{ filtro_desde }} al {{ filtro_hasta }}</small>
+    </div>
+  </form>
+
   {% regroup object_list by creado_en.date as pedidos_por_fecha %}
+  <div id="gruposContenedor">
   {% for group in pedidos_por_fecha %}
     {% with group.grouper|date:'Y-m-d' as fecha_id %}
       <h4 class="fecha-group d-flex align-items-center justify-content-between" data-fecha="{{ fecha_id }}">
@@ -229,6 +256,7 @@
       </div>
     {% endwith %}
   {% endfor %}
+  </div>
 </div>
 
 <!-- Modal editar pedido -->
@@ -293,6 +321,13 @@
 <script src="{% static 'js/reconnecting-websocket.min.js' %}"></script>
 <script>
 (function () {
+  // Rango de fechas que el servidor usó para armar esta pantalla (ver
+  // _resolver_rango_fechas en views.py). Se usa más abajo para no
+  // insertar en vivo un pedido cuya fecha caiga fuera de lo que el
+  // filtro está mostrando en este momento.
+  window.FILTRO_DESDE = "{{ filtro_desde }}";
+  window.FILTRO_HASTA = "{{ filtro_hasta }}";
+
   const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/productos/`;
   let socket = new ReconnectingWebSocket(wsUrl);
 
@@ -440,7 +475,17 @@
             actualizarContadorMes(mesId);
           
           } else {
-            const container = document.getElementById('featured-3');
+            // 🛡️ Si esta pantalla tiene un rango de fechas filtrado (ej.
+            // "marzo 2025") y llega un aviso de un pedido de HOY (fuera de
+            // ese rango), no lo insertamos — mostrarlo rompería lo que el
+            // filtro dice que se está viendo. Sí se sigue viendo apenas se
+            // vuelva a cargar la pantalla con el rango que corresponda.
+            if (window.FILTRO_DESDE && window.FILTRO_HASTA &&
+                (fechaId < window.FILTRO_DESDE || fechaId > window.FILTRO_HASTA)) {
+              return;
+            }
+
+            const container = document.getElementById('gruposContenedor');
             const [año, mes, dia] = fechaId.split('-');
             const fecha = new Date(Number(año), Number(mes) - 1, Number(dia));
             const fechaFormateada = fecha.toLocaleDateString(navigator.language || 'es-CO', {
@@ -580,7 +625,12 @@
     // Ahora se lee directamente el atributo data-fecha="YYYY-MM-DD" que
     // pone el servidor (y que también ponen los grupos nuevos insertados
     // por WS más abajo), así no depende de parsear texto ni del idioma.
-    const container = document.getElementById("featured-3");
+    //
+    // 📌 Importante: este contenedor es SOLO el de los grupos de fechas
+    // (gruposContenedor), no todo #featured-3 — ese también tiene el
+    // título de la página y el formulario de filtro por rango de fechas,
+    // y no queremos borrarlos cada vez que se reorganiza por año/mes.
+    const container = document.getElementById("gruposContenedor");
     const grupos = [...container.querySelectorAll(".fecha-group")];
 
     const estructura = {};
@@ -602,7 +652,7 @@
       estructura[año][mesId].push({ header: grupo, pedidos, totalPedidos, fechaId });
     });
 
-    container.innerHTML = "<h2 class='pb-2 border-bottom'>Historial agrupado</h2>";
+    container.innerHTML = "";
 
     Object.keys(estructura).sort((a, b) => b - a).forEach(año => {
       const añoDiv = document.createElement("div");
