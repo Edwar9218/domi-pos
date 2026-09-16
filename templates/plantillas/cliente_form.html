@@ -5,7 +5,12 @@
 {% endblock %}
 
 {% block content %}
-<div class="mt-5 pt-3 pb-5" style="max-width: 700px; margin: 0 auto; padding-left: 12px; padding-right: 12px;">
+<style>
+  #id_plus_code {
+    padding-right: 2.2rem;
+  }
+</style>
+<div class="mt-5 pt-5 pb-5" style="max-width: 700px; margin: 0 auto; padding-left: 12px; padding-right: 12px;">
   <div class="card p-4">
     <h2 class="mb-3">
       {% if object %}✏️ Editar dirección{% else %}➕ Nueva dirección{% endif %}
@@ -23,11 +28,6 @@
       </div>
 
       <div class="mb-3">
-        <label for="{{ form.telefono.id_for_label }}" class="form-label">{{ form.telefono.label }}</label>
-        {{ form.telefono }}
-      </div>
-
-      <div class="mb-3">
         <label for="{{ form.direccion.id_for_label }}" class="form-label">{{ form.direccion.label }}</label>
         {{ form.direccion }}
         {% for error in form.direccion.errors %}
@@ -37,7 +37,16 @@
 
       <div class="mb-3">
         <label for="{{ form.plus_code.id_for_label }}" class="form-label">{{ form.plus_code.label }}</label>
-        {{ form.plus_code }}
+        <div style="position: relative;">
+          {{ form.plus_code }}
+          <button
+            type="button"
+            onclick="document.getElementById('{{ form.plus_code.id_for_label }}').value = ''; document.getElementById('{{ form.plus_code.id_for_label }}').focus();"
+            title="Borrar"
+            aria-label="Borrar el Plus Code"
+            style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: transparent; font-size: 1.1rem; line-height: 1; color: #6b7280; cursor: pointer; padding: 4px 6px;"
+          >✕</button>
+        </div>
         <small class="text-muted d-block mt-1">
           En Google Maps: toca la ubicación → "Compartir" → copia el código que empieza como
           <strong>7WCV+2Q</strong> y pégalo aquí (con la ciudad, si lo trae).
@@ -49,6 +58,32 @@
         <a href="{% url 'clientes_listar' %}" class="btn btn-outline-secondary">Cancelar</a>
       </div>
     </form>
+
+    {% if object %}
+      <hr class="my-4">
+      <h5 class="mb-3">📞 Números de teléfono</h5>
+
+      {% if object.telefonos.all %}
+        {% for t in object.telefonos.all %}
+          <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+            <span>{{ t.numero }}</span>
+            <form method="post" action="{% url 'telefono_eliminar' t.id %}"
+                  onsubmit="return confirm('¿Quitar el número {{ t.numero|escapejs }}?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline-danger btn-sm" title="Quitar este número">🗑️ Quitar</button>
+            </form>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted" style="font-size: 0.9rem;">Este cliente todavía no tiene ningún número guardado.</p>
+      {% endif %}
+
+      <form method="post" action="{% url 'telefono_crear' object.id %}" class="d-flex gap-2 mt-3 flex-wrap">
+        {% csrf_token %}
+        <input type="text" name="numero" class="form-control" placeholder="Agregar número..." style="max-width: 220px;" required>
+        <button type="submit" class="btn btn-outline-primary btn-sm">➕ Agregar</button>
+      </form>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

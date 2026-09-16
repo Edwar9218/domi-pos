@@ -5,6 +5,7 @@ from pos.views import (
     pedidos_por_fecha, pedidos_esperando_domiciliario,
     ConfirmarRecogidaListView, ConfirmarRecogidaView, EliminarPedidoView,
     ClienteListView, ClienteCreateView, ClienteUpdateView, ClienteDeleteView,
+    TelefonoCreateView, TelefonoDeleteView,
 )
 
 urlpatterns = [
@@ -24,4 +25,6 @@ urlpatterns = [
     path('clientes/nuevo/', ClienteCreateView.as_view(), name='cliente_crear'),
     path('clientes/<int:pk>/editar/', ClienteUpdateView.as_view(), name='cliente_editar'),
     path('clientes/<int:pk>/eliminar/', ClienteDeleteView.as_view(), name='cliente_eliminar'),
+    path('clientes/<int:cliente_id>/telefonos/nuevo/', TelefonoCreateView.as_view(), name='telefono_crear'),
+    path('telefonos/<int:pk>/eliminar/', TelefonoDeleteView.as_view(), name='telefono_eliminar'),
 ]

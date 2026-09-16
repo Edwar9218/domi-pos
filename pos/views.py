@@ -8,8 +8,8 @@ from django.template.loader import render_to_string
 from django.core.cache import cache
 
 # Modelos y utilidades locales
-from .models import Producto, Cliente
-from .forms import ClienteForm
+from .models import Producto, Cliente, Telefono
+from .forms import ClienteForm, TelefonoForm
 from .util import imprimir_texto
 from .background import background_executor
 from .cache_keys import PEDIDOS_ESPERANDO_DOMICILIARIO
@@ -295,14 +295,14 @@ class ClienteListView(ListView):
     context_object_name = "clientes"
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().prefetch_related("telefonos")
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(
                 Q(nombre__icontains=q)
-                | Q(telefono__icontains=q)
+                | Q(telefonos__numero__icontains=q)
                 | Q(direccion__icontains=q)
-            )
+            ).distinct()
         return qs
 
     def get_context_data(self, **kwargs):
@@ -323,6 +323,27 @@ class ClienteUpdateView(UpdateView):
     form_class = ClienteForm
     template_name = "plantillas/cliente_form.html"
     success_url = reverse_lazy("clientes_listar")
+
+
+class TelefonoCreateView(View):
+    """Agrega un número más a un cliente que ya existe -- se llama
+    desde el formulario chiquito que está directo en cada tarjeta de
+    la lista, sin tener que entrar a editar el cliente."""
+    def post(self, request, cliente_id):
+        cliente = get_object_or_404(Cliente, pk=cliente_id)
+        form = TelefonoForm(request.POST)
+        if form.is_valid():
+            telefono = form.save(commit=False)
+            telefono.cliente = cliente
+            telefono.save()
+        return redirect(reverse("clientes_listar"))
+
+
+class TelefonoDeleteView(View):
+    def post(self, request, pk):
+        telefono = get_object_or_404(Telefono, pk=pk)
+        telefono.delete()
+        return redirect(reverse("clientes_listar"))
 
 
 class ClienteDeleteView(View):

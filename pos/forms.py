@@ -1,19 +1,15 @@
 from django import forms
-from .models import Cliente
+from .models import Cliente, Telefono
 
 
 class ClienteForm(forms.ModelForm):
     class Meta:
         model = Cliente
-        fields = ["nombre", "telefono", "direccion", "plus_code"]
+        fields = ["nombre", "direccion", "plus_code"]
         widgets = {
             "nombre": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Nombre del cliente",
-            }),
-            "telefono": forms.TextInput(attrs={
-                "class": "form-control",
-                "placeholder": "Ej: 300 123 4567",
             }),
             "direccion": forms.Textarea(attrs={
                 "class": "form-control",
@@ -27,7 +23,22 @@ class ClienteForm(forms.ModelForm):
         }
         labels = {
             "nombre": "Nombre del cliente",
-            "telefono": "Teléfono (opcional)",
             "direccion": "Dirección",
             "plus_code": "Plus Code de Google Maps (opcional)",
         }
+
+
+class TelefonoForm(forms.ModelForm):
+    """Formulario chiquito para agregar un número más a un cliente que
+    ya existe -- se usa directo en la tarjeta de la lista, sin tener
+    que entrar a editar."""
+    class Meta:
+        model = Telefono
+        fields = ["numero"]
+        widgets = {
+            "numero": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Agregar número...",
+            }),
+        }
+        labels = {"numero": "Número"}

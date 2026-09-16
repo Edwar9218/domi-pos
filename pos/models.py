@@ -1,5 +1,6 @@
 from django.db import models
 from urllib.parse import quote
+import re
 
 # Create your models here.
 class Producto(models.Model):
@@ -27,9 +28,12 @@ class Cliente(models.Model):
     directo de Google Maps (botón "Compartir" -> el código que aparece,
     ej: "7WCV+2Q Cali, Colombia") -- con eso se arma un link que abre
     la ubicación exacta en Maps, sin necesitar ninguna llave de API.
+
+    Los teléfonos NO van acá directamente -- un cliente puede tener más
+    de uno (casa, trabajo, etc.), así que viven en el modelo Telefono de
+    abajo, uno por cada número.
     """
     nombre = models.CharField(max_length=150)
-    telefono = models.CharField(max_length=30, blank=True)
     direccion = models.TextField()
     plus_code = models.CharField(
         max_length=150, blank=True,
@@ -49,3 +53,48 @@ class Cliente(models.Model):
         if not self.plus_code:
             return None
         return f"https://www.google.com/maps/search/?api=1&query={quote(self.plus_code)}"
+
+
+class Telefono(models.Model):
+    """
+    Un número de teléfono de un Cliente, con sus propios accesos
+    directos de "llamar" y "WhatsApp". Un mismo cliente puede tener
+    varios (por eso es un modelo aparte, no un campo suelto).
+    """
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name='telefonos')
+    numero = models.CharField(max_length=30)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return self.numero
+
+    def _digitos(self):
+        """El número tal como se guarda puede traer espacios, guiones,
+        etc. (ej: '300 123 4567') -- esto se queda solo con los números."""
+        if not self.numero:
+            return ""
+        return re.sub(r"\D", "", self.numero)
+
+    def tel_url(self):
+        """Link tel: para llamar directo -- funciona tal cual, sin
+        necesitar el indicativo del país (el celular ya sabe marcar
+        números locales)."""
+        digitos = self._digitos()
+        return f"tel:{digitos}" if digitos else None
+
+    def whatsapp_url(self):
+        """Link wa.me para abrir un chat de WhatsApp directo. A
+        diferencia de una llamada normal, WhatsApp SÍ necesita el
+        indicativo de país completo -- si el número tiene 10 dígitos
+        (el formato típico en Colombia, sin indicativo), se le agrega
+        el 57 automáticamente. Si ya trae más dígitos, se asume que el
+        indicativo ya está incluido y se deja tal cual."""
+        digitos = self._digitos()
+        if not digitos:
+            return None
+        if len(digitos) == 10:
+            digitos = "57" + digitos
+        return f"https://wa.me/{digitos}"

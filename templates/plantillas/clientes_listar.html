@@ -3,7 +3,7 @@
 {% block title %}Direcciones guardadas{% endblock %}
 
 {% block content %}
-<div class="mt-5 pt-3 pb-5" style="max-width: 700px; margin: 0 auto; padding-left: 12px; padding-right: 12px;">
+<div class="mt-5 pt-5 pb-5" style="max-width: 700px; margin: 0 auto; padding-left: 12px; padding-right: 12px;">
   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
     <h2 class="mb-0">📍 Direcciones guardadas</h2>
     <a href="{% url 'cliente_crear' %}" class="btn btn-primary">➕ Nueva dirección</a>
@@ -23,30 +23,49 @@
   {% if clientes %}
     {% for c in clientes %}
       <div class="card mb-3 p-3">
-        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-          <div style="min-width: 0; flex: 1 1 260px;">
-            <h5 class="mb-1">{{ c.nombre }}</h5>
-            {% if c.telefono %}
-              <div class="text-muted mb-1">📞 {{ c.telefono }}</div>
-            {% endif %}
-            <div class="mb-2" style="white-space: pre-wrap;">{{ c.direccion }}</div>
-            {% if c.maps_url %}
-              <a href="{{ c.maps_url }}" target="_blank" rel="noopener" class="btn btn-success btn-sm">
-                📍 Ver en Google Maps
-              </a>
-            {% else %}
-              <span class="text-muted" style="font-size: 0.85rem;">Sin Plus Code guardado</span>
-            {% endif %}
-          </div>
-          <div class="d-flex flex-column gap-2">
-            <a href="{% url 'cliente_editar' c.id %}" class="btn btn-outline-secondary btn-sm">✏️ Editar</a>
+        <div class="d-flex justify-content-between align-items-start gap-2">
+          <h5 class="mb-1" style="min-width: 0; word-break: break-word;">{{ c.nombre }}</h5>
+          <div class="d-flex gap-2" style="flex-shrink: 0;">
+            <a href="{% url 'cliente_editar' c.id %}" class="btn btn-outline-secondary btn-sm" title="Editar">
+              ✏️ <span class="d-none d-sm-inline">Editar</span>
+            </a>
             <form method="post" action="{% url 'cliente_eliminar' c.id %}"
                   onsubmit="return confirm('¿Eliminar la dirección de {{ c.nombre|escapejs }}?');">
               {% csrf_token %}
-              <button type="submit" class="btn btn-danger btn-sm w-100">🗑️ Eliminar</button>
+              <button type="submit" class="btn btn-danger btn-sm" title="Eliminar">
+                🗑️ <span class="d-none d-sm-inline">Eliminar</span>
+              </button>
             </form>
           </div>
         </div>
+        {% if c.telefonos.all %}
+          <div class="mb-2 d-flex flex-column gap-1">
+            {% for t in c.telefonos.all %}
+              <div class="dropdown">
+                <button
+                  class="btn btn-outline-secondary btn-sm dropdown-toggle"
+                  type="button"
+                  data-bs-toggle="dropdown"
+                  aria-expanded="false"
+                >
+                  📞 {{ t.numero }}
+                </button>
+                <ul class="dropdown-menu">
+                  <li><a class="dropdown-item" href="{{ t.tel_url }}">📞 Llamada normal</a></li>
+                  <li><a class="dropdown-item" href="{{ t.whatsapp_url }}" target="_blank" rel="noopener">💬 Llamada por WhatsApp</a></li>
+                </ul>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="mb-2" style="white-space: pre-wrap;">{{ c.direccion }}</div>
+        {% if c.maps_url %}
+          <a href="{{ c.maps_url }}" target="_blank" rel="noopener" class="btn btn-success btn-sm">
+            📍 Ver en Google Maps
+          </a>
+        {% else %}
+          <span class="text-muted" style="font-size: 0.85rem;">Sin Plus Code guardado</span>
+        {% endif %}
       </div>
     {% endfor %}
   {% elif q %}
