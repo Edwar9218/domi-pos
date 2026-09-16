@@ -140,6 +140,14 @@
     0%, 100% { box-shadow: 0 2px 10px rgba(0,0,0,0.3), 0 0 0 0 rgba(22,163,74,0.55); }
     50% { box-shadow: 0 2px 10px rgba(0,0,0,0.3), 0 0 0 9px rgba(22,163,74,0); }
   }
+
+  /* 🔔 El banner de "pedido enviado a imprimir" se desvanece solo,
+     como una tarjeta de notificación, en vez de desaparecer de golpe. */
+  #estadoImpresion.desvaneciendo {
+    transition: opacity 1s ease, transform 1s ease;
+    opacity: 0;
+    transform: translateY(-6px);
+  }
   .fab-spinner {
     width: 18px;
     height: 18px;
@@ -407,6 +415,16 @@ document.addEventListener("DOMContentLoaded", function () {
     banner.style.color = "#0f5132";
     banner.style.backgroundColor = "#d1e7dd";
     banner.textContent = "✅ Pedido enviado a imprimir.";
+
+    // 🔔 Se queda visible un momento y luego se desvanece solo, como una
+    // tarjeta de notificación, en vez de quedarse ahí o desaparecer de golpe.
+    setTimeout(() => {
+      banner.classList.add("desvaneciendo");
+      banner.addEventListener("transitionend", () => {
+        banner.style.display = "none";
+        banner.classList.remove("desvaneciendo");
+      }, { once: true });
+    }, 3000);
   }
 
   // Limpia el "?check=" de la URL para que un refresh no lo vuelva a mostrar
